@@ -1,12 +1,7 @@
 export PATH=$PATH:/root/blender-3.2.2-linux-x64/
-# blender -b -P tools/blender_script.py -- \
-#             --object_path output/horse_saddle_pbr/output_mesh.obj \
-#             --output_dir output/blender \
-#             --num_renders 4 \
-#             --engine CYCLES
 
 # n=10
-t=('Trellis' '3DTopia-XL' 'LN3Diff' 'crm' 'hunyuan' 'spard_glb' 'triposr' 'unique3d')
+t=('Trellis' '3DTopia-XL' 'LN3Diff' 'hunyuan' 'spard_glb' 'unique3d')
 # let split=$n*8
 # for index in {0..7}
 # do

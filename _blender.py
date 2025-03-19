@@ -247,7 +247,10 @@ def save_images(args) -> None:
     obj = bpy.data.objects[key]
     # normalize_obj(obj)
     obj.rotation_mode = 'XYZ'
-    obj.rotation_euler = (0.,0.,math.radians(90))
+    if args.output_dir.split('/')[-2] in ['spard_glb']:
+        obj.rotation_euler = (0.,0.,math.radians(-90))
+    else:
+        obj.rotation_euler = (0.,0.,math.radians(90))
     
     normalize_scene()
 

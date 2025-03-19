@@ -59,7 +59,7 @@ def main():
     use_gpus = ['0', '1', '2', '3', '4', '5', '6', '7']
     use_gpus = use_gpus[:args.gpus]
     
-    workers_per_gpu = 4
+    workers_per_gpu = 6
     
     with open(f'data/{args.method}.json') as f:
         object_paths = json.load(f)
