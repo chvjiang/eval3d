@@ -8,8 +8,6 @@ import os
 
 import argparse
 
-from rich.progress import track
-
 def worker(queue, count, gpu):
     while True:
         item = queue.get()
@@ -44,6 +42,7 @@ def worker(queue, count, gpu):
             count.value += 1
 
         queue.task_done()
+    queue.task_done()
     
 
 def main():
@@ -59,7 +58,7 @@ def main():
     use_gpus = ['0', '1', '2', '3', '4', '5', '6', '7']
     use_gpus = use_gpus[:args.gpus]
     
-    workers_per_gpu = 6
+    workers_per_gpu = 4
     
     with open(f'data/{args.method}.json') as f:
         object_paths = json.load(f)
@@ -67,6 +66,7 @@ def main():
     queue = multiprocessing.JoinableQueue()
     count = multiprocessing.Value("i", 0)
     
+    processes = []
     for gpu_i in use_gpus:
         for _ in range(workers_per_gpu):
             process = multiprocessing.Process(
@@ -74,6 +74,7 @@ def main():
             )
             process.daemon = True
             process.start()
+            processes.append(process)
 
     object_paths_list = list(object_paths.values())
     object_paths_list.sort()
@@ -84,7 +85,7 @@ def main():
     os.makedirs(save_path,exist_ok=True)
     save_path = os.path.join(save_path,args.method)
 
-    for object_path in track(object_paths_list):
+    for object_path in object_paths_list:
             
         queue_item = {}
         queue_item['object_path'] = object_path
@@ -98,6 +99,8 @@ def main():
         
     # Wait for all tasks to be completed
     queue.join()
+    for process in processes:
+        process.join()
     
 if __name__ == '__main__':
     main()
