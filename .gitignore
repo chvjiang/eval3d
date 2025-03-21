@@ -1,0 +1,5 @@
+*.log
+*.ipynb
+/cache
+/temp
+/lights/*.jpg
