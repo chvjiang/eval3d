@@ -249,6 +249,10 @@ def save_images(args) -> None:
     obj.rotation_mode = 'XYZ'
     if args.output_dir.split('/')[-2] in ['spard_glb']:
         obj.rotation_euler = (0.,0.,math.radians(-90))
+    elif args.output_dir.split('/')[-2] in ['LN3Diff']:
+        obj.rotation_euler = (math.radians(90),0.,math.radians(90))
+    elif args.output_dir.split('/')[-2] in ['crm']:
+        obj.rotation_euler = (math.radians(90),0.,math.radians(-90))
     else:
         obj.rotation_euler = (0.,0.,math.radians(90))
     
@@ -307,6 +311,7 @@ if __name__ == "__main__":
     parser.add_argument("--output_dir", type=str, default="./output")
     parser.add_argument("--engine", type=str, default="BLENDER_EEVEE", choices=["CYCLES", "BLENDER_EEVEE"])
     parser.add_argument("--num_images", type=int, default=1)
+    parser.add_argument('--cpu', action='store_true')
     parser.add_argument("--H", type=int, default=512)
     parser.add_argument("--W", type=int, default=512)
     parser.add_argument("--camera_dist", type=int, default=1.5)
@@ -341,9 +346,9 @@ if __name__ == "__main__":
     bpy.context.preferences.addons["cycles"].preferences.get_devices()
     for d in bpy.context.preferences.addons["cycles"].preferences.devices:
         if 'CPU' in d["name"]:
-            d["use"] = False
+            d["use"] = args.cpu
         else:
-            d["use"] = True
+            d["use"] = not args.cpu
         print(d["name"], d["use"])
 
     object_name = args.object_path.split('/')[-1].split('.')[0]
