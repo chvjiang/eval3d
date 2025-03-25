@@ -249,8 +249,6 @@ def save_images(args) -> None:
     obj.rotation_mode = 'XYZ'
     if args.output_dir.split('/')[-2] in ['spard_glb']:
         obj.rotation_euler = (0.,0.,math.radians(-90))
-    elif args.output_dir.split('/')[-2] in ['LN3Diff']:
-        obj.rotation_euler = (math.radians(90),0.,math.radians(90))
     elif args.output_dir.split('/')[-2] in ['crm']:
         obj.rotation_euler = (math.radians(90),0.,math.radians(-90))
     else:

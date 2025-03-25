@@ -1,5 +1,9 @@
+# ignore files
 *.log
 *.ipynb
+/lights/*.jpg
+
+# ignore folders
 /cache
 /temp
-/lights/*.jpg
+/data
