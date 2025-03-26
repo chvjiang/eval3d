@@ -1,7 +1,7 @@
-export PATH=$PATH:/root/blender-3.2.2-linux-x64/
+export PATH=$PATH:/fs-computility/mllm/chuziyang/blender-3.2.2-linux-x64/
 
 # n=10
-t=('Trellis' '3DTopia-XL' 'LN3Diff' 'hunyuan' 'spard_glb' 'unique3d')
+t=('Trellis' '3DTopia-XL' 'hunyuan' 'crm' 'spard_glb' 'unique3d')
 # let split=$n*8
 # for index in {0..7}
 # do
@@ -20,11 +20,16 @@ t=('Trellis' '3DTopia-XL' 'LN3Diff' 'hunyuan' 'spard_glb' 'unique3d')
 #     done
 # done
 # wait
-for file in ${t[@]}
+
+for light in `ls lights/*.hdr`
 do
-    python distribute.py --save_path /fs-computility/mllm/chuziyang/eval3d/render \
-        --method ${file} \
-        --light lights/warm_restaurant_night_1k.hdr &
-    sleep 20
+    for file in ${t[@]}
+    do
+        python distribute.py --save_path /fs-computility/mllm/shared/chuziyang/eval3d/render \
+            --method ${file} \
+            --light ${light} &
+        sleep 20
+    done
+    wait
 done
 wait
