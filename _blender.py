@@ -264,17 +264,21 @@ def save_images(args) -> None:
     scene.collection.objects.link(empty)
     cam_constraint.target = empty
     for i in range(args.num_images):
-        # set the camera position
-        theta = 0#(i / args.num_images) * math.pi * 2
+        if args.mode == 'light':
+            cam_theta = 0
+            light_theta = i / args.num_images * math.pi * 2
+        elif args.mode == 'object':
+            cam_theta = i / args.num_images * math.pi * 2
+            light_theta = 0
         phi = math.radians(0)
         point = (
-            args.camera_dist * math.cos(phi) * math.cos(theta),
-            args.camera_dist * math.cos(phi) * math.sin(theta),
+            args.camera_dist * math.cos(phi) * math.cos(cam_theta),
+            args.camera_dist * math.cos(phi) * math.sin(cam_theta),
             args.camera_dist * math.sin(phi),
         )
         cam.location = point
         apply_hdri(path = args.light_path,
-                   angle = Euler([0.,0.,i / args.num_images * math.pi * 2]))
+                   angle = Euler([0.,0.,light_theta]))
         # render the image
         render_path = os.path.join(args.output_dir, f"{i:03d}.png")
         scene.render.filepath = render_path
@@ -308,6 +312,7 @@ if __name__ == "__main__":
     parser.add_argument('--light_path', type=str, required=True, help='Path to the light file')
     parser.add_argument("--output_dir", type=str, default="./output")
     parser.add_argument("--engine", type=str, default="BLENDER_EEVEE", choices=["CYCLES", "BLENDER_EEVEE"])
+    parser.add_argument("--mode", type=str, default="light", choices=["light", "object"])
     parser.add_argument("--num_images", type=int, default=1)
     parser.add_argument('--cpu', action='store_true')
     parser.add_argument("--H", type=int, default=512)

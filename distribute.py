@@ -15,10 +15,9 @@ def worker(queue, count, gpu):
             break
             
         obj_path = item['object_path']
-        
         save_path = item['save_path']
-        
         light_path = item['light_path']
+        render_mode = item['render_mode']
 
         os.makedirs(save_path, exist_ok = True)
             
@@ -32,6 +31,7 @@ def worker(queue, count, gpu):
             f" --object_path {obj_path}"
             f" --output_dir {save_path}"
             f" --light_path {light_path}"
+            f" --mode {render_mode}"
             f" --num_images 40"
             f" --engine CYCLES"
             #f" > /dev/null 2>&1"
@@ -52,6 +52,7 @@ def main():
     parser.add_argument('--method', type=str, required=True,
                         choices=['Trellis','3DTopia-XL','LN3Diff','crm','hunyuan','spard_glb','triposr','unique3d'])
     parser.add_argument('--light', type=str, required=True)
+    parser.add_argument('--mode', type=str, choices=['light','object'])
     parser.add_argument('--save_path', type=str, default='./output')
     args = parser.parse_args()
     
@@ -91,6 +92,7 @@ def main():
         queue_item['object_path'] = object_path
         queue_item['save_path'] = save_path
         queue_item['light_path'] = args.light
+        queue_item['render_mode'] = args.mode
         queue.put(queue_item)
         
     # Add sentinels to the queue to stop the worker processes
