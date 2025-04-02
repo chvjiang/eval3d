@@ -269,7 +269,7 @@ def save_images(args) -> None:
             light_theta = i / args.num_images * math.pi * 2
         elif args.mode == 'object':
             cam_theta = i / args.num_images * math.pi * 2
-            light_theta = 0
+            light_theta = - i / args.num_images * math.pi * 2
         phi = math.radians(0)
         point = (
             args.camera_dist * math.cos(phi) * math.cos(cam_theta),
