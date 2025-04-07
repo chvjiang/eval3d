@@ -1,3 +1,15 @@
+""" Script to convert vertex-color objects to textured objects.
+
+This script is used to convert the texture format of objects. It takes in a vertex
+-colored object file and convert it to a .glb file with texture map.
+
+Example usage:
+    python convert.py
+        --input example.obj
+        --output example.glb
+        --resolution 1024
+"""
+
 import cv2
 import numpy as np
 import trimesh
