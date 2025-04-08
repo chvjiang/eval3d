@@ -251,6 +251,8 @@ def save_images(args) -> None:
         obj.rotation_euler = (0.,0.,math.radians(-90))
     elif args.output_dir.split('/')[-2] in ['crm']:
         obj.rotation_euler = (math.radians(90),0.,math.radians(-90))
+    elif args.output_dir.split('/')[-2] in ['triposr']:
+        obj.rotation_euler = (math.radians(-90),0.,0.)
     else:
         obj.rotation_euler = (0.,0.,math.radians(90))
     
