@@ -1,19 +1,18 @@
-"""Blender script to render images of 3D models.
+""" Blender script to render images of 3D models.
 
-This script is used to render images of 3D models. It takes in a list of paths
-to .glb files and renders images of each model. The images are from rotating the
+This script is used to render images of 3D models. It takes in the path to 
+.glb files and renders images of each model. The images are from rotating the
 object around the origin. The images are saved to the output directory.
 
 Example usage:
-    blender -b -P blender_script.py -- \
-        --object_path my_object.glb \
-        --output_dir ./views \
+    blender -b -P _blender.py -- \
+        --object_path example.glb \
+        --output_dir ./output \
+        --light_path light.hdr \
         --engine CYCLES \
-        --scale 0.8 \
-        --num_images 12 \
-        --camera_dist 1.2
+        --mode object \
+        --num_images 40 \
 
-Here, input_model_paths.json is a json file containing a list of paths to .glb.
 """
 
 from typing import Any, Callable, Dict, Generator, List, Literal, Optional, Set, Tuple
@@ -55,20 +54,19 @@ def build_rgb_background(world: bpy.types.World,
 
     node_tree.links.new(rgb_node.outputs["Color"], node_tree.nodes["Background"].inputs["Color"])
 
-def add_lighting() -> None:
+def add_light(light_type="AREA", energy=1000, point=[0.,0.5,0.]):
     # delete the default light
-    # bpy.data.objects["Light"].select_set(True)
-    # bpy.ops.object.delete()
+    for l in ['Light','Area','Point','Sun','Spot']:
+        if l in bpy.data.objects.keys():
+            bpy.data.objects[l].select_set(True)
+            bpy.ops.object.delete()
     # add a new light
-    bpy.ops.object.light_add(type="AREA")
-    light2 = bpy.data.lights["Area"]
-    light2.energy = 30000
-    bpy.data.objects["Area"].location[2] = 0.5
-    bpy.data.objects["Area"].scale[0] = 100
-    bpy.data.objects["Area"].scale[1] = 100
-    bpy.data.objects["Area"].scale[2] = 100
+    bpy.ops.object.light_add(type=light_type.upper(),location=point)
+    light2 = bpy.data.objects[light_type.capitalize()]
+    light2.data.energy = energy
+    # light2.rotation_euler = Euler((math.radians(-90), 0, 0), 'XYZ')
 
-def apply_hdri(path, angle = Euler([0.,0.,0.]), bg = Vector([1.,1.,1.,1.])):
+def add_hdri(path, angle = Euler([0.,0.,0.]), bg = Vector([1.,1.,1.,1.])):
     world_node_tree = bpy.context.scene.world.node_tree
     world_node_tree.nodes.clear()
     environment_texture_node = world_node_tree.nodes.new(type='ShaderNodeTexEnvironment')
@@ -233,11 +231,11 @@ def save_images(args) -> None:
     """Saves rendered images of the object in the scene."""
     os.makedirs(args.output_dir, exist_ok=True)
     reset_scene()
-    # load the object
     load_object(args.object_path)
     
     # bpy.ops.mesh.primitive_plane_add(size=3, location=(0.0, 0.0, 0.0), rotation=(0.0, 0.0, 0.0))
-
+    
+    print(bpy.data.objects.keys())
     for key in bpy.data.objects.keys():
         if key in ['Camera','Light','world']:
             continue
@@ -258,33 +256,32 @@ def save_images(args) -> None:
     
     normalize_scene()
 
-    # add_lighting()
-
     cam, cam_constraint = setup_camera()
-    # create an empty object to track
+    ### create an empty object to track
     empty = bpy.data.objects.new("Empty", None)
     scene.collection.objects.link(empty)
     cam_constraint.target = empty
     for i in range(args.num_images):
         if args.mode == 'light':
-            cam_theta = 0
             light_theta = i / args.num_images * math.pi * 2
         elif args.mode == 'object':
-            cam_theta = i / args.num_images * math.pi * 2
-            light_theta = - i / args.num_images * math.pi * 2
-        phi = math.radians(0)
+            light_theta = - math.pi / 3
+        phi = theta = math.radians(0)
         point = (
-            args.camera_dist * math.cos(phi) * math.cos(cam_theta),
-            args.camera_dist * math.cos(phi) * math.sin(cam_theta),
+            args.camera_dist * math.cos(phi) * math.cos(theta),
+            args.camera_dist * math.cos(phi) * math.sin(theta),
             args.camera_dist * math.sin(phi),
         )
         cam.location = point
-        apply_hdri(path = args.light_path,
-                   angle = Euler([0.,0.,light_theta]))
-        # render the image
+        if args.light_path:
+            add_hdri(path = args.light_path, angle = Euler([0.,0.,light_theta]))
+        else:
+            add_light(light_type='point', energy = 6000, point = [0.,10,0.])
         render_path = os.path.join(args.output_dir, f"{i:03d}.png")
         scene.render.filepath = render_path
         bpy.ops.render.render(write_still=True)
+        if args.mode == 'object':
+            obj.rotation_euler.z -= math.pi * 2 / args.num_images
 
 def add_background(args):
     scene = bpy.context.scene
@@ -311,12 +308,13 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser()
     parser.add_argument("--object_path", type=str, required=True, help="Path to the object file")
-    parser.add_argument('--light_path', type=str, required=True, help='Path to the light file')
+    parser.add_argument('--light_path', type=str, help='Path to the light file')
     parser.add_argument("--output_dir", type=str, default="./output")
     parser.add_argument("--engine", type=str, default="BLENDER_EEVEE", choices=["CYCLES", "BLENDER_EEVEE"])
     parser.add_argument("--mode", type=str, default="light", choices=["light", "object"])
     parser.add_argument("--num_images", type=int, default=1)
     parser.add_argument('--cpu', action='store_true')
+    parser.add_argument('--bg', action='store_true')
     parser.add_argument("--H", type=int, default=512)
     parser.add_argument("--W", type=int, default=512)
     parser.add_argument("--camera_dist", type=int, default=1.5)
@@ -334,7 +332,7 @@ if __name__ == "__main__":
     render.resolution_x = args.H
     render.resolution_y = args.W
     render.resolution_percentage = 100
-    render.film_transparent = True
+    render.film_transparent = not args.bg
 
     scene.use_nodes = True
     scene.cycles.device = "GPU"
@@ -361,7 +359,6 @@ if __name__ == "__main__":
     try:
         start_i = time.time()
         save_images(args)
-        # add_background(args)
         end_i = time.time()
         print("Finished", args.object_path, "in", end_i - start_i, "seconds")
     except Exception as e:
