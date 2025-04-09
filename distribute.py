@@ -25,14 +25,14 @@ def worker(queue, count, gpu):
         command = (
             # f"export DISPLAY=:0.{gpu} &&"
             f" GOMP_CPU_AFFINITY='0-47' OMP_NUM_THREADS=48 OMP_SCHEDULE=STATIC OMP_PROC_BIND=CLOSE "
-            f" CUDA_VISIBLE_DEVICES={gpu} "
-            # f" blender -b -P _blender.py --"
+            # f" CUDA_VISIBLE_DEVICES={gpu} "
             f" blender -b -P _blender.py --"
             f" --object_path {obj_path}"
             f" --output_dir {save_path}"
             f" --light_path {light_path}"
             f" --mode {render_mode}"
             f" --num_images 40"
+            f" --bg"
             f" --engine CYCLES"
             #f" > /dev/null 2>&1"
         )
@@ -51,7 +51,7 @@ def main():
     parser.add_argument('--gpus', type=int, default=8)
     parser.add_argument('--method', type=str, required=True,
                         choices=['Trellis','3DTopia-XL','LN3Diff','crm','hunyuan','spard_glb','triposr','unique3d'])
-    parser.add_argument('--light', type=str, required=True)
+    parser.add_argument('--light', type=str)
     parser.add_argument('--mode', type=str, choices=['light','object'])
     parser.add_argument('--save_path', type=str, default='./output')
     args = parser.parse_args()
@@ -61,7 +61,7 @@ def main():
     
     workers_per_gpu = 4
     
-    with open(f'data/{args.method}.json') as f:
+    with open(f'data/{args.method}.json','r') as f:
         object_paths = json.load(f)
     
     queue = multiprocessing.JoinableQueue()
