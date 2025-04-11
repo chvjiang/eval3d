@@ -11,19 +11,19 @@ import argparse
 VC = ['dreamfusion','instantmesh','latent-nerf','magic3d','mvdream','openlrm','sjc','syncdreamer','sz123','wonder3d','z123']
 R = {
     'crm':                  [90, 0, -90],
-    # 'dreamfusion':          [0, 0, 0],
+    'wonder3d':             [90, 0, -90],
+    'dreamfusion':          [0, 0, 0],
     'latent-nerf':          [0, 0, 0],
     'magic3d':              [0, 0, 0],
+    'mvdream':              [0, 0, 0],
     'syncdreamer':          [0, 0, 0],
     'sz123':                [0, 0, 0],
     'z123':                 [0, 0, 0],
-    'instantmesh':          [0, 180, 180],
     'luciddreamer_glb':     [-90, 0, 0],
-    'mvdream':              [0, 0, 0],
-    'spard_glb':            [0, 0, -90],
     'triplanegaussian_glb': [-90, 0, 0],
     'triposr':              [-90, 0, 0],
-    'wonder3d':             [90, 0, -90],
+    'spard_glb':            [0, 0, -90],
+    'instantmesh':          [0, 180, 180],
 }
 
 def worker(queue, count, gpu):
@@ -81,6 +81,7 @@ def main():
     
     parser = argparse.ArgumentParser()
     parser.add_argument('--gpus', type=int, default=0)
+    parser.add_argument('--worker', type=int, default=4)
     parser.add_argument('--method', type=str, required=True)
     parser.add_argument('--light', type=str)
     parser.add_argument('--mode', type=str, choices=['light','object'])
@@ -92,7 +93,7 @@ def main():
     
     if not use_gpus:
         use_gpus = [-1]
-    workers_per_gpu = 4
+    workers_per_gpu = args.worker
     
     with open(f'data/{args.method}.json','r') as f:
         object_paths = json.load(f)
