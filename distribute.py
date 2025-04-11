@@ -8,6 +8,24 @@ import os
 
 import argparse
 
+VC = ['dreamfusion','instantmesh','latent-nerf','magic3d','mvdream','openlrm','sjc','syncdreamer','sz123','wonder3d','z123']
+R = {
+    'crm':                  [90, 0, -90],
+    # 'dreamfusion':          [0, 0, 0],
+    'latent-nerf':          [0, 0, 0],
+    'magic3d':              [0, 0, 0],
+    'syncdreamer':          [0, 0, 0],
+    'sz123':                [0, 0, 0],
+    'z123':                 [0, 0, 0],
+    'instantmesh':          [0, 180, 180],
+    'luciddreamer_glb':     [-90, 0, 0],
+    'mvdream':              [0, 0, 0],
+    'spard_glb':            [0, 0, -90],
+    'triplanegaussian_glb': [-90, 0, 0],
+    'triposr':              [-90, 0, 0],
+    'wonder3d':             [90, 0, -90],
+}
+
 def worker(queue, count, gpu):
     while True:
         item = queue.get()
@@ -18,14 +36,16 @@ def worker(queue, count, gpu):
         save_path = item['save_path']
         light_path = item['light_path']
         render_mode = item['render_mode']
+        method = item['method'].lower()
 
         os.makedirs(save_path, exist_ok = True)
             
-        # Perform some operation on the item
-        command = (
-            # f"export DISPLAY=:0.{gpu} &&"
-            f" GOMP_CPU_AFFINITY='0-47' OMP_NUM_THREADS=48 OMP_SCHEDULE=STATIC OMP_PROC_BIND=CLOSE "
-            # f" CUDA_VISIBLE_DEVICES={gpu} "
+        if gpu != -1:
+            command = (f" CUDA_VISIBLE_DEVICES={gpu} ")
+        else:
+            command = (f" GOMP_CPU_AFFINITY='0-63' OMP_NUM_THREADS=64 OMP_SCHEDULE=STATIC OMP_PROC_BIND=CLOSE ")
+
+        command += (
             f" blender -b -P _blender.py --"
             f" --object_path {obj_path}"
             f" --output_dir {save_path}"
@@ -33,9 +53,21 @@ def worker(queue, count, gpu):
             f" --mode {render_mode}"
             f" --num_images 40"
             f" --bg"
-            f" --engine CYCLES"
-            #f" > /dev/null 2>&1"
         )
+        if method in VC:
+            command += f" --vc"
+        if gpu == -1:
+            command += f" --cpu"
+        if method in R.keys():
+            x, y, z = R[method]
+            command += (
+                f" --rotation_x {x}"
+                f" --rotation_y {y}"
+                f" --rotation_z {z}"
+            )
+        else:
+            command += f" --rotation_z 90"
+
         subprocess.run(command, shell=True)
 
         with count.get_lock():
@@ -48,9 +80,8 @@ def worker(queue, count, gpu):
 def main():
     
     parser = argparse.ArgumentParser()
-    parser.add_argument('--gpus', type=int, default=8)
-    parser.add_argument('--method', type=str, required=True,
-                        choices=['Trellis','3DTopia-XL','LN3Diff','crm','hunyuan','spard_glb','triposr','unique3d'])
+    parser.add_argument('--gpus', type=int, default=0)
+    parser.add_argument('--method', type=str, required=True)
     parser.add_argument('--light', type=str)
     parser.add_argument('--mode', type=str, choices=['light','object'])
     parser.add_argument('--save_path', type=str, default='./output')
@@ -59,6 +90,8 @@ def main():
     use_gpus = ['0', '1', '2', '3', '4', '5', '6', '7']
     use_gpus = use_gpus[:args.gpus]
     
+    if not use_gpus:
+        use_gpus = [-1]
     workers_per_gpu = 4
     
     with open(f'data/{args.method}.json','r') as f:
@@ -80,11 +113,11 @@ def main():
     object_paths_list = list(object_paths.values())
     object_paths_list.sort()
 
-    os.makedirs(args.save_path,exist_ok=True)
+    os.makedirs(args.save_path, exist_ok=True)
     light_name = args.light.split('/')[-1].split('.')[0]
-    save_path = os.path.join(args.save_path,f'light_{light_name}')
-    os.makedirs(save_path,exist_ok=True)
-    save_path = os.path.join(save_path,args.method)
+    save_path = os.path.join(args.save_path, f'light_{light_name}')
+    os.makedirs(save_path, exist_ok=True)
+    save_path = os.path.join(save_path, args.method)
 
     for object_path in object_paths_list:
             
@@ -93,6 +126,7 @@ def main():
         queue_item['save_path'] = save_path
         queue_item['light_path'] = args.light
         queue_item['render_mode'] = args.mode
+        queue_item['method'] = args.method
         queue.put(queue_item)
         
     # Add sentinels to the queue to stop the worker processes

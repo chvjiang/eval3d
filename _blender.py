@@ -54,12 +54,13 @@ def build_rgb_background(world: bpy.types.World,
 
     node_tree.links.new(rgb_node.outputs["Color"], node_tree.nodes["Background"].inputs["Color"])
 
-def add_light(light_type="AREA", energy=1000, point=[0.,0.5,0.]):
-    # delete the default light
+def reset_light():
     for l in ['Light','Area','Point','Sun','Spot']:
         if l in bpy.data.objects.keys():
             bpy.data.objects[l].select_set(True)
             bpy.ops.object.delete()
+
+def add_light(light_type="AREA", energy=1000, point=[0.,0.5,0.]):
     # add a new light
     bpy.ops.object.light_add(type=light_type.upper(),location=point)
     light2 = bpy.data.objects[light_type.capitalize()]
@@ -108,8 +109,55 @@ def reset_scene() -> None:
     for image in bpy.data.images:
         bpy.data.images.remove(image, do_unlink=True)
 
+def load_vertex_color_obj(obj_path):
+    vertices = []
+    vertex_colors = []
+    faces = []
+    
+    with open(obj_path, 'r') as f:
+        for line in f:
+            if line.startswith('v '):
+                parts = line.strip().split()
+                if len(parts) >= 6:
+                    x, y, z = map(float, parts[1:4])
+                    r, g, b = map(float, parts[4:7])
+                    vertices.append((x, y, z))
+                    vertex_colors.append((r, g, b))
+            
+            elif line.startswith('f '):
+                faces.append([int(i.split('/')[0]) - 1 for i in line.split()[1:]])
 
-# load the model
+    vertices, vertex_colors, faces = np.array(vertices), np.array(vertex_colors), faces
+    
+    mesh = bpy.data.meshes.new("CustomMesh")
+    mesh.from_pydata(vertices, [], faces)
+    obj = bpy.data.objects.new("VertexColorObj", mesh)
+    bpy.context.collection.objects.link(obj)
+    
+    color_layer = mesh.vertex_colors.new(name="Col")
+    for poly in mesh.polygons:
+        for loop_idx in poly.loop_indices:
+            vert_idx = mesh.loops[loop_idx].vertex_index
+            color_layer.data[loop_idx].color = (*vertex_colors[vert_idx], 1.0)
+    
+    mat = bpy.data.materials.new(name="VertexColorMaterial")
+    mat.use_nodes = True
+    nodes = mat.node_tree.nodes
+    nodes.clear()
+    
+    vertex_color_node = nodes.new('ShaderNodeVertexColor')
+    vertex_color_node.layer_name = "Col"
+    
+    bsdf_node = nodes.new('ShaderNodeBsdfPrincipled')
+    output_node = nodes.new('ShaderNodeOutputMaterial')
+    
+    mat.node_tree.links.new(vertex_color_node.outputs["Color"], bsdf_node.inputs["Base Color"])
+    mat.node_tree.links.new(bsdf_node.outputs["BSDF"], output_node.inputs["Surface"])
+    obj.data.materials.append(mat)
+    
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+
 def load_object(object_path: str) -> None:
     """Loads a model with a supported file extension into the scene.
 
@@ -150,7 +198,6 @@ def load_object(object_path: str) -> None:
     else:
         import_function(filepath=object_path)
 
-
 def scene_bbox(single_obj=None, ignore_matrix=False):
     bbox_min = (math.inf,) * 3
     bbox_max = (-math.inf,) * 3
@@ -167,18 +214,15 @@ def scene_bbox(single_obj=None, ignore_matrix=False):
         raise RuntimeError("no objects in scene to compute bounding box for")
     return Vector(bbox_min), Vector(bbox_max)
 
-
 def scene_root_objects():
     for obj in bpy.context.scene.objects.values():
         if not obj.parent:
             yield obj
 
-
 def scene_meshes():
     for obj in bpy.context.scene.objects.values():
         if isinstance(obj.data, (bpy.types.Mesh)):
             yield obj
-
 
 def normalize_scene():
     bbox_min, bbox_max = scene_bbox()
@@ -193,7 +237,6 @@ def normalize_scene():
         obj.matrix_world.translation += offset
     bpy.ops.object.select_all(action="DESELECT")
 
-
 def setup_camera():
     cam = scene.objects["Camera"]
     cam.location = (0, 1.2, 0)
@@ -203,7 +246,6 @@ def setup_camera():
     cam_constraint.track_axis = "TRACK_NEGATIVE_Z"
     cam_constraint.up_axis = "UP_Y"
     return cam, cam_constraint
-
 
 def normalize_obj(obj):
     minX,minY,minZ,maxX,maxY,maxZ = 0,0,0,0,0,0
@@ -231,9 +273,10 @@ def save_images(args) -> None:
     """Saves rendered images of the object in the scene."""
     os.makedirs(args.output_dir, exist_ok=True)
     reset_scene()
-    load_object(args.object_path)
-    
-    # bpy.ops.mesh.primitive_plane_add(size=3, location=(0.0, 0.0, 0.0), rotation=(0.0, 0.0, 0.0))
+    if args.vc:
+        load_vertex_color_obj(args.object_path)
+    else:
+        load_object(args.object_path)
     
     print(bpy.data.objects.keys())
     for key in bpy.data.objects.keys():
@@ -245,14 +288,9 @@ def save_images(args) -> None:
     obj = bpy.data.objects[key]
     # normalize_obj(obj)
     obj.rotation_mode = 'XYZ'
-    if args.output_dir.split('/')[-2] in ['spard_glb']:
-        obj.rotation_euler = (0.,0.,math.radians(-90))
-    elif args.output_dir.split('/')[-2] in ['crm']:
-        obj.rotation_euler = (math.radians(90),0.,math.radians(-90))
-    elif args.output_dir.split('/')[-2] in ['triposr']:
-        obj.rotation_euler = (math.radians(-90),0.,0.)
-    else:
-        obj.rotation_euler = (0.,0.,math.radians(90))
+    obj.rotation_euler = (math.radians(args.rotation_x),
+                          math.radians(args.rotation_y),
+                          math.radians(args.rotation_z))
     
     normalize_scene()
 
@@ -276,7 +314,18 @@ def save_images(args) -> None:
         if args.light_path:
             add_hdri(path = args.light_path, angle = Euler([0.,0.,light_theta]))
         else:
-            add_light(light_type='point', energy = 6000, point = [0.,10,0.])
+            reset_light()
+
+            ### right light 1
+            # cam.rotation_euler = (math.radians(30), 0, 0)
+            # cam.location[2] = 0.5
+            # add_light(light_type='point', energy = 500, point = [1,2,1])
+            
+            ### right light 2
+            cam.rotation_euler = (math.radians(-30), 0, 0)
+            cam.location[2] = -0.5
+            add_light(light_type='point', energy = 500, point = [1,2,-1])
+            
         render_path = os.path.join(args.output_dir, f"{i:03d}.png")
         scene.render.filepath = render_path
         bpy.ops.render.render(write_still=True)
@@ -310,14 +359,18 @@ if __name__ == "__main__":
     parser.add_argument("--object_path", type=str, required=True, help="Path to the object file")
     parser.add_argument('--light_path', type=str, help='Path to the light file')
     parser.add_argument("--output_dir", type=str, default="./output")
-    parser.add_argument("--engine", type=str, default="BLENDER_EEVEE", choices=["CYCLES", "BLENDER_EEVEE"])
     parser.add_argument("--mode", type=str, default="light", choices=["light", "object"])
     parser.add_argument("--num_images", type=int, default=1)
+    parser.add_argument("--rotation_x", type=int, default=0)
+    parser.add_argument("--rotation_y", type=int, default=0)
+    parser.add_argument("--rotation_z", type=int, default=0)
     parser.add_argument('--cpu', action='store_true')
     parser.add_argument('--bg', action='store_true')
+    parser.add_argument('--vc', action='store_true')
     parser.add_argument("--H", type=int, default=512)
     parser.add_argument("--W", type=int, default=512)
     parser.add_argument("--camera_dist", type=int, default=1.5)
+    parser.add_argument("--engine", type=str, default="CYCLES", choices=["CYCLES", "BLENDER_EEVEE"])
 
     argv = sys.argv[sys.argv.index("--") + 1 :]
     args = parser.parse_args(argv)
