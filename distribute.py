@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import time
 import os
-
+import logging
 import argparse
 
 VC = ['dreamfusion','instantmesh','latent-nerf','magic3d','mvdream','openlrm','sjc','syncdreamer','sz123','wonder3d','z123']
@@ -49,11 +49,14 @@ def worker(queue, count, gpu):
             f" blender -b -P _blender.py --"
             f" --object_path {obj_path}"
             f" --output_dir {save_path}"
-            f" --light_path {light_path}"
             f" --mode {render_mode}"
             f" --num_images 40"
             f" --bg"
         )
+        if light_path.endswith('.hdr'):
+            command += f" --light_path {light_path}"
+        else:
+            command += f" --light_type {light_path}"
         if method in VC:
             command += f" --vc"
         if gpu == -1:
@@ -70,6 +73,8 @@ def worker(queue, count, gpu):
 
         subprocess.run(command, shell=True)
 
+        logging.info(f'rendering:\t{obj_path}')
+
         with count.get_lock():
             count.value += 1
 
@@ -83,11 +88,15 @@ def main():
     parser.add_argument('--gpus', type=int, default=0)
     parser.add_argument('--worker', type=int, default=4)
     parser.add_argument('--method', type=str, required=True)
-    parser.add_argument('--light', type=str)
+    parser.add_argument('--light', type=str, required=True)
     parser.add_argument('--mode', type=str, choices=['light','object'])
     parser.add_argument('--save_path', type=str, default='./output')
     args = parser.parse_args()
     
+    os.makedirs('log', exist_ok=True)
+    t = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime())
+    logging.basicConfig(filename=f'log/{args.method.split("_")[0]}-{t}.log', level=logging.INFO)
+
     use_gpus = ['0', '1', '2', '3', '4', '5', '6', '7']
     use_gpus = use_gpus[:args.gpus]
     

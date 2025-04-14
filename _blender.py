@@ -67,12 +67,13 @@ def add_light(light_type="AREA", energy=1000, point=[0.,0.5,0.]):
     light2.data.energy = energy
     # light2.rotation_euler = Euler((math.radians(-90), 0, 0), 'XYZ')
 
-def add_hdri(path, angle = Euler([0.,0.,0.]), bg = Vector([1.,1.,1.,1.])):
+def add_hdri(path, strength = 1.0, angle = Euler([0.,0.,0.]), bg = Vector([1.,1.,1.,1.])):
     world_node_tree = bpy.context.scene.world.node_tree
     world_node_tree.nodes.clear()
     environment_texture_node = world_node_tree.nodes.new(type='ShaderNodeTexEnvironment')
     environment_texture_node.image = bpy.data.images.load(path)
     hdri_background_node = world_node_tree.nodes.new(type='ShaderNodeBackground')
+    hdri_background_node.inputs['Strength'].default_value = strength
     world_output_node = world_node_tree.nodes.new(type='ShaderNodeOutputWorld')
     mapping_node = world_node_tree.nodes.new(type='ShaderNodeMapping')
     mapping_node.inputs['Rotation'].default_value = angle
@@ -299,32 +300,40 @@ def save_images(args) -> None:
     empty = bpy.data.objects.new("Empty", None)
     scene.collection.objects.link(empty)
     cam_constraint.target = empty
+
     for i in range(args.num_images):
         if args.mode == 'light':
             light_theta = i / args.num_images * math.pi * 2
         elif args.mode == 'object':
-            light_theta = - math.pi / 3
+            light_theta = - math.pi / 2
+
         phi = theta = math.radians(0)
-        point = (
+        cam.location = (
             args.camera_dist * math.cos(phi) * math.cos(theta),
             args.camera_dist * math.cos(phi) * math.sin(theta),
             args.camera_dist * math.sin(phi),
         )
-        cam.location = point
+
         if args.light_path:
-            add_hdri(path = args.light_path, angle = Euler([0.,0.,light_theta]))
+            s = 0.8 if 'outdoor' in args.light_path else 1.0
+            add_hdri(path = args.light_path, strength = s, angle = Euler([0.,0.,light_theta]))
         else:
             reset_light()
+            scale = 2 if 'Trellis' in args.object_path or 'hunyuan' in args.object_path else 1
+            energy = 400 * scale
 
-            ### right light 1
-            # cam.rotation_euler = (math.radians(30), 0, 0)
-            # cam.location[2] = 0.5
-            # add_light(light_type='point', energy = 500, point = [1,2,1])
+            if args.light_type == 'top':
+                add_light(light_type='point', energy = energy, point = [0,0,2])
+
+            elif args.light_type == 'right_top':
+                cam.rotation_euler = (math.radians(30), 0, 0)
+                cam.location[2] = 0.5
+                add_light(light_type='point', energy = energy, point = [1,2,1])
             
-            ### right light 2
-            cam.rotation_euler = (math.radians(-30), 0, 0)
-            cam.location[2] = -0.5
-            add_light(light_type='point', energy = 500, point = [1,2,-1])
+            elif args.light_type == 'right_bottom':
+                cam.rotation_euler = (math.radians(-30), 0, 0)
+                cam.location[2] = -0.5
+                add_light(light_type='point', energy = energy, point = [1,2,-1])
             
         render_path = os.path.join(args.output_dir, f"{i:03d}.png")
         scene.render.filepath = render_path
@@ -358,8 +367,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--object_path", type=str, required=True, help="Path to the object file")
     parser.add_argument('--light_path', type=str, help='Path to the light file')
+    parser.add_argument('--light_type', type=str, choices=["top", "right_top", "right_bottom"])
     parser.add_argument("--output_dir", type=str, default="./output")
-    parser.add_argument("--mode", type=str, default="light", choices=["light", "object"])
+    parser.add_argument("--mode", type=str, default="object", choices=["light", "object"])
     parser.add_argument("--num_images", type=int, default=1)
     parser.add_argument("--rotation_x", type=int, default=0)
     parser.add_argument("--rotation_y", type=int, default=0)
@@ -374,6 +384,8 @@ if __name__ == "__main__":
 
     argv = sys.argv[sys.argv.index("--") + 1 :]
     args = parser.parse_args(argv)
+
+    assert args.light_path or args.light_type
 
     context = bpy.context
     scene = context.scene
@@ -408,7 +420,7 @@ if __name__ == "__main__":
         print(d["name"], d["use"])
 
     object_name = args.object_path.split('/')[-1].split('.')[0]
-    args.output_dir = os.path.join(args.output_dir,object_name)
+    args.output_dir = os.path.join(args.output_dir, object_name)
     try:
         start_i = time.time()
         save_images(args)
