@@ -51,10 +51,10 @@ def worker(queue, count, gpu):
             f" --output_dir {save_path}"
             f" --mode {render_mode}"
             f" --num_images 40"
-            f" --bg"
         )
         if light_path.endswith('.hdr'):
             command += f" --light_path {light_path}"
+            command += f" --bg"
         else:
             command += f" --light_type {light_path}"
         if method in VC:
