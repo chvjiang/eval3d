@@ -323,7 +323,7 @@ def save_images(args) -> None:
             energy = 400 * scale
 
             if args.light_type == 'top':
-                add_light(light_type='point', energy = energy, point = [0,0,2])
+                add_light(light_type='point', energy = energy, point = [0.5,0,2])
 
             elif args.light_type == 'right_top':
                 cam.rotation_euler = (math.radians(30), 0, 0)

@@ -8,12 +8,13 @@ import os
 import logging
 import argparse
 
-VC = ['dreamfusion','instantmesh','latent-nerf','magic3d','mvdream','openlrm','sjc','syncdreamer','sz123','wonder3d','z123']
+VC = ['dreamfusion','grm','grm_sv3d','instantmesh','latent-nerf','magic123','magic3d','mvdream','openlrm','sjc','syncdreamer','sz123','wonder3d','z123']
 R = {
     'crm':                  [90, 0, -90],
     'wonder3d':             [90, 0, -90],
     'dreamfusion':          [0, 0, 0],
     'latent-nerf':          [0, 0, 0],
+    'magic123':             [0, 0, 0],
     'magic3d':              [0, 0, 0],
     'mvdream':              [0, 0, 0],
     'syncdreamer':          [0, 0, 0],
@@ -23,6 +24,7 @@ R = {
     'triplanegaussian_glb': [-90, 0, 0],
     'triposr':              [-90, 0, 0],
     'spard_glb':            [0, 0, -90],
+    'grm_sv3d':             [0, 0, 180],
     'instantmesh':          [0, 180, 180],
 }
 
