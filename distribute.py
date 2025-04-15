@@ -97,7 +97,7 @@ def main():
     
     os.makedirs('log', exist_ok=True)
     t = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime())
-    logging.basicConfig(filename=f'log/{args.method.split("_")[0]}-{t}.log', level=logging.INFO)
+    logging.basicConfig(filename=f'log/{args.method}-{t}.log', level=logging.INFO)
 
     use_gpus = ['0', '1', '2', '3', '4', '5', '6', '7']
     use_gpus = use_gpus[:args.gpus]
