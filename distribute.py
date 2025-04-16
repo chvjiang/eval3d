@@ -44,6 +44,7 @@ def worker(queue, count, gpu):
             
         if gpu != -1:
             command = (f" CUDA_VISIBLE_DEVICES={gpu} ")
+            # command = (f" ")
         else:
             command = (f" GOMP_CPU_AFFINITY='0-63' OMP_NUM_THREADS=64 OMP_SCHEDULE=STATIC OMP_PROC_BIND=CLOSE ")
 
@@ -91,7 +92,7 @@ def main():
     parser.add_argument('--worker', type=int, default=4)
     parser.add_argument('--method', type=str, required=True)
     parser.add_argument('--light', type=str, required=True)
-    parser.add_argument('--mode', type=str, choices=['light','object'])
+    parser.add_argument('--mode', type=str, required=True, choices=['light','object'])
     parser.add_argument('--save_path', type=str, default='./output')
     args = parser.parse_args()
     
