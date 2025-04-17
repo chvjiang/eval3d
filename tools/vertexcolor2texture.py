@@ -4,7 +4,7 @@ This script is used to convert the texture format of objects. It takes in a vert
 -colored object file and convert it to a .glb file with texture map.
 
 Example usage:
-    python convert.py
+    python vertexcolor2texture.py
         --input example.obj
         --output example.glb
         --resolution 1024

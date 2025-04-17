@@ -5,7 +5,7 @@ in the path to .hdr files and renders images of this light by reflecting from th
 metal ball. The images are saved to the output directory.
 
 Example usage:
-    blender -b -P _blender.py -- \
+    blender -b -P metalball_render_hdr.py -- \
         --output_dir ./output \
         --light_path light.hdr \
 
@@ -138,7 +138,7 @@ def render_hdr_with_metalball(args):
     )
     cam.location = point
     os.makedirs(args.output_dir, exist_ok=True)
-    light_name = args.light_path.split('/')[-1].split('.')[0]
+    light_name = os.path.splitext(os.path.basename(args.light_path))[0]
     render_path = os.path.join(args.output_dir,f'{light_name}.png')
     scene.render.filepath = render_path
     bpy.ops.render.render(write_still=True)
