@@ -5,7 +5,7 @@ This script is used to render images of 3D models. It takes in the path to
 object around the origin. The images are saved to the output directory.
 
 Example usage:
-    blender -b -P blender.py -- \
+    blender -b -P render_blender.py -- \
         --object_path example.glb \
         --output_dir ./output \
         --light_path light.hdr \

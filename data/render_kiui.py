@@ -495,12 +495,7 @@ def kiui_render(opt):
             for num,azi in enumerate(azimuth):
                 if opt.object:
                     gui.cam.from_angle(ele, azi)
-                    ### front light
                     gui.light_dir = np.array([ele,azi])
-                    ### top light
-                    # gui.light_dir = np.array([ele-90,0])
-                    ### right light
-                    # gui.light_dir = np.array([ele,azi+90])
                 elif opt.light:
                     gui.cam.from_angle(0, 0)
                     gui.light_dir = np.array([ele, azi])
@@ -526,7 +521,7 @@ def kiui_render(opt):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--mesh', type=str, help="txt file of mesh path (obj, ply, glb, ...)")
+    parser.add_argument('--mesh', type=str, help="json file of mesh path (obj, glb)")
     parser.add_argument('--split', type=int, default=1)
     parser.add_argument('--index', type=int, default=0)
     parser.add_argument('--object',action='store_true')
@@ -558,20 +553,20 @@ if __name__ == '__main__':
     data = data[int(step*opt.index):int(step*(opt.index+1))]
 
     save_path_root = opt.save_image if opt.save_image else opt.save_video if opt.save_video else None
-    if save_path_root:
+    if save_path_root and data:
         os.makedirs(save_path_root,exist_ok=True)
+        os.makedirs(os.path.join(save_path_root,opt.mode),exist_ok=True)
 
     for index, i in enumerate(data):
-        path = i.replace('\n','')
+        path = os.path.abspath(i.replace('\n',''))
         opt.mesh = path
-        sub_path = path.split('/')[-2]
-        obj_name = path.split('/')[-1].split('.')[0]
+        sub_path = os.path.basename(os.path.dirname(path))
+        obj_name = os.path.splitext(os.path.basename(path))[0]
         if opt.save_image is not None:
-            os.makedirs(os.path.join(save_path_root,sub_path),exist_ok=True)
-            os.makedirs(os.path.join(save_path_root,sub_path,obj_name),exist_ok=True)
-            opt.save_image = os.path.join(save_path_root,sub_path,obj_name,opt.mode)
+            os.makedirs(os.path.join(save_path_root,opt.mode,sub_path),exist_ok=True)
+            opt.save_image = os.path.join(save_path_root,opt.mode,sub_path,obj_name)
         elif opt.save_video is not None:
-            os.makedirs(os.path.join(save_path_root,sub_path),exist_ok=True)
-            opt.save_video = os.path.join(save_path_root,sub_path,obj_name)
+            os.makedirs(os.path.join(save_path_root,opt.mode,sub_path),exist_ok=True)
+            opt.save_video = os.path.join(save_path_root,opt.mode,sub_path,obj_name)
         kiui_render(opt)
         

@@ -30,6 +30,6 @@ if __name__=='__main__':
         paths_dict[obj_path] = 0    # 0 means the obj is not rendered
     
     name = os.path.basename(args.data_dir)
-    os.makedirs('data/json', exist_ok=True)
-    with open(f'data/json/{name}.json', 'w') as f:
+    os.makedirs('./data/json', exist_ok=True)
+    with open(f'./data/json/{name}.json', 'w') as f:
         json.dump(paths_dict, f, indent=2)
