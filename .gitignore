@@ -1,13 +1,14 @@
 # ignore files
 *.log
 *.ipynb
-/lights/*.jpg
+/data/lights/*.jpg
 *.json
 
 # ignore folders
+__pycache__/
 /cache
 /temp
-/data
+/data/json
 /test
 /scripts
 /log
