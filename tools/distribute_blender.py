@@ -49,7 +49,7 @@ def worker(queue, count, gpu):
             command = (f" GOMP_CPU_AFFINITY='0-63' OMP_NUM_THREADS=64 OMP_SCHEDULE=STATIC OMP_PROC_BIND=CLOSE ")
 
         command += (
-            f" blender -b -P data/blender.py --"
+            f" blender -b -P ./data/render_blender.py --"
             f" --object_path {obj_path}"
             f" --output_dir {save_path}"
             f" --mode {render_mode}"
@@ -97,9 +97,9 @@ def main():
     args = parser.parse_args()
     
     args.method = os.path.splitext(os.path.basename(args.json))[0]
-    os.makedirs('log', exist_ok=True)
+    os.makedirs('./log', exist_ok=True)
     t = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime())
-    logging.basicConfig(filename=f'log/{args.method}-{t}.log', level=logging.INFO)
+    logging.basicConfig(filename=f'./log/{args.method}-{t}.log', level=logging.INFO)
 
     use_gpus = ['0', '1', '2', '3', '4', '5', '6', '7']
     use_gpus = use_gpus[:args.gpus]
