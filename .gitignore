@@ -2,6 +2,7 @@
 *.log
 *.ipynb
 /data/lights/*.jpg
+/data/lights/*.png
 *.json
 
 # ignore folders
