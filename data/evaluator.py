@@ -163,10 +163,14 @@ Analyze *every* view with extreme scrutiny and provide scores following the crit
             else:
                 system_prompt = f"""You are an *exceptionally* strict expert 3D model evaluation system. Your standards are *incredibly* high, and you possess an *uncompromising* eye for even the slightest imperfections. Do not hesitate to penalize flaws, even if they seem minor. Only truly exceptional 3D models that exhibit near-perfect adherence to the reference should receive high scores.
 
-The image shows three rows of views:
-1. Top row (Geometry View): Shows structural and geometric information
-2. Middle row (Normal Map View): Shows surface details and geometric features
-3. Bottom row (RGB View): Shows colors, materials and textures
+The image shows seven rows of views:
+1. First row (Geometry View): Shows structural and geometric information
+2. Second row (RGB View): Shows colors, materials and textures
+3. Third row (Lighting View): Shows textures under top lighting
+4. Fourth row (Lighting View): Shows textures under right lighting with camera angle down
+5. Fifth row (Lighting View): Shows textures under right lighting with camera angle up
+6. Sixth row (Lighting View): Shows textures under indoor environment lighting
+7. Seventh row (Lighting View): Shows textures under outdoor environment lighting
 
 Each row contains:
 - Original reference image (leftmost)
@@ -372,66 +376,45 @@ Your task is to assess the reliability of each evaluation. Approach this task wi
             return None
 
     def get_evaluation_prompt(self, additional_prompt=''):
-        return f"""{additional_prompt} Analyze all three types of views (Geometry, Normal Map, RGB) and provide scores with explanations for:
+        return f"""{additional_prompt} Analyze all seven types of views and provide scores with explanations for:
 
 
-1) Geometry Plausibility (0-9): Assess using Geometry View & Normal Map 
+1) Consistency & Artifact (0-4): Use all Lighting Views 
+- 0: No clear features of textures
+- 1: Large-scale discontinuity such as large area of luminance differences / incorrect highlights / shadows
+- 2: Clear inconsistencies or artifacts in multi-views, such as abrupt brightness changes
+- 3: Minor inconsistencies or minor shading artifacts
+- 4: Perfectly consistent and seamless without shading artifacts
 
+2) Detail & Complexity (0-4): Use Geometry View and RGB View (*ignore plausibility, focus on details*)  
+- 0: No clear features of textures
+- 1: Very simplistic or overly detailed
+- 2: Poor balance between simplicity and intricacy
+- 3: Moderate details with imperfect quality or in improper positions
+- 4: Suitable details with an optimal visual balance
 
+3) Colorfulness & Saturation (0-4): Use Geometry View and RGB View (*ignore plausibility, focus on colors*)  
+- 0: No clear features of textures
+- 1: Extremely saturated or colorful, hard to interpret
+- 2: Incorrect saturation or lack of color diversity
+- 3: Suitable saturation with imperfect color defects
+- 4: Excellent colorfulness and easy to interpret
 
-- 0: Complete collapse/blank (training failure).
-- 1-2: Unrecognizable or nonsensical shapes (e.g., fragmented geometry, severe abstraction).
--- 1: Barely recognizable fragments: Vague outlines (Geometry) + random directions (Normal) (e.g., vague outlines but no coherent structure).
--- 2: Abstract shapes unrelated to the prompt: Abstract shapes (Geometry) + chaotic patterns (Normal) (e.g., "cat" rendered as chaotic geometry).
-- 3-5: Recognizable in BOTH views but flawed:
--- 3: Clear object identity but severe issues: Structural anomalies visible in BOTH views (e.g., multi-head, structural anomalies).
--- 4: Structurally normal but overly simplistic: Overly simplified in Geometry + basic Normals (e.g., basic shape with no details, minimal noise).
--- 5: Structurally normal with moderate noise/details:  Complete structure (Geometry) + logical Normals (minor surface noise allowed) (e.g., identifiable "chair" with surface bumps but no defects).
---- Core Principle: 5/9 requires:
----- Geometry View: Clear structural recognition
----- Normal Map: Logical surface continuity
----- RGB: No conflicting evidence
----- 5 is the score for a 3D model to be considered as a good 3D model, if the Geometry View and Normal Map are not recognizable as an object clearly, the score should be definitely less than 5.
-- 6-8: Structurally sound + detail-rich:
--- 6: Clean structure + minor defects: Precise Geometry + accurate Normal details (e.g., small surface dents).
--- 7: High-quality details + minimal noise: Complex Geometry + nuanced Normals (e.g., intricate carvings).
--- 8: Near-perfect: Scan-quality Geometry + microscopic Normal details (reserved for exceptional cases).
-- 9: Unused (unattainable by current models).
-
-2) Geometry Details (0-4): Use Normal Map View (*ignore plausibility, focus on detail density*)  
-- 0: Blank/training failure  
-- 1: Smooth surfaces, no meaningful details (basic shape only)  
-- 2: Minimal details (e.g., simple facial features)  
-- 3: Moderate details (clear features like whiskers, texture folds)  
-- 4: Highly detailed (complex structures like fur, ornaments, minimal noise)  
-
-3) Texture Quality (0-4): Focus on RGB View  
-- 0: No texture/extreme blur (unrecognizable)  
-- 1: Low aesthetic (blurry but recognizable base features)  
-- 2: Medium aesthetic (partial clarity, inconsistent across views)  
-- 3: High aesthetic (consistent style across views)  
-- 4: Photorealistic (flawless, view-consistent)  
-
-4) Geometry-Texture Coherency (0-1): Compare all views  
-- 0: Inconsistent (texture masks geometry flaws/conflicts)  
-- 1: Coherent (texture aligns naturally with geometry)  
-
-5) Prompt-Asset Alignment (0-4): Compare with reference  
-- 0: Unrelated/unrecognizable  
-- 1: Partial match (correct category only)  
-- 2: Majority match (key attributes correct; quantity/position errors)  
-- 3: Near-complete match (minor detail deviations)  
-- 4: Perfect alignment (all textual/image elements precisely replicated)  
+4) Material Plausibility (0-4): Use indoor and outdoor Lighting Views
+- 0: No clear features of textures
+- 1: Poor reflection behaviors or extreme exposure
+- 2: Incorrect metallic or roughness settings across the texture
+- 3: Minor deviation from material specification in prompt
+- 4: Excellent light reflection and plausible exposure
 
 REQUIRED FORMAT:  
-Scores: [X, X, X, X, X]  
+Scores: [X, X, X, X]  
 
 Explanations:  
-1. Geometry Plausibility (X/9): [Specify structural tier (e.g., "collapsed" or "recognizable with anomalies"), cite issues (noise, multi-head, etc.)]  
-2. Geometry Details (X/4): [Differentiate details vs. noise (e.g., "rich mane details but surface noise")]  
-3. Texture Quality (X/4): [Aesthetic level + view consistency (e.g., "front texture sharp, back missing")]  
-4. Geometry-Texture Coherency (X/1): [Note conflicts (e.g., "texture renders non-existent geometry")]  
-5. Prompt-Asset Alignment (X/4): [Match category/quantity/attributes to text/image]  """
+1. Consistency & Artifact (X/4): [Specify view consistency (e.g., "acceptable front texture but back missing")]  
+2. Detail & Complexity (X/4): [Differentiate details with balance (e.g., "rich details but regionally complex")]  
+3. Colorfulness & Saturation (X/4): [Aesthetic level and Color Plausibility (e.g., "extreme saturated")]  
+4. Material Plausibility (X/4): [Note conflicts (e.g., "texture reflections not realism")]  """
 
     def get_review_prompt(self, all_evaluations,additional_prompt=''):
         prompt = f"""{additional_prompt} As an expert reviewer, evaluate the reliability of the following model evaluations.
@@ -921,13 +904,13 @@ def process_image(image_file, api_key, output_dir, is_text_based=False, debug=Fa
                 prompt_text = f.read()
             print(f'prompt_text: {prompt_text}')
 
-        output_file = os.path.join(output_dir, f"{os.path.splitext(image_file)[0]}.json")
+        output_file = os.path.join(output_dir, f"{os.path.splitext(os.path.basename(image_file))[0]}.json")
 
         # if os.path.exists(output_file) and not debug:
         #     return 
         image_path = image_file
         
-        evaluator = MultiModelEvaluator(api_key=api_key, models="gpt-4o")
+        evaluator = MultiModelEvaluator(api_key=api_key, models=["gpt-4o"])
         print(evaluator)
         evaluations, reviews, final_scores, source_models, confidence_scores = evaluator.evaluate_and_review(image_path, prompt_text)
         
@@ -1023,20 +1006,20 @@ def process_image(image_file, api_key, output_dir, is_text_based=False, debug=Fa
         }
 
 def main():
-    api_key = "sk-gES1qlU8KXz6Y986eu1ib4iGzcXAFmI2nDgd2I6pHi3xSus3"
-    data_path = 'output/concat'
+    api_key = "sk-c7nmz7iOglUKwHWxSbSXLThqtZ5VnBPEUYH6xaQgshXvTB3t"
+    data_path = './output/concat'
+    output_dir = './output/scores'
+    os.makedirs(output_dir, exist_ok=True)
     methods = [m for m in os.listdir(data_path) if os.path.isdir(os.path.join(data_path,m))]  
 
     # import ipdb; ipdb.set_trace()
-    for method in methods:
+    for method in ['hunyuan']:#methods:
         print(f'Processing {method}...')
         
         concat_dir = f'{data_path}/{method}'
-        output_dir = f'output/scores'
 
         max_workers = mp.cpu_count()
 
-        os.makedirs(output_dir, exist_ok=True)
         summary_file = os.path.join(output_dir, f"final_scores_summary.csv")
         if not os.path.exists(summary_file):
             with open(summary_file, 'w', newline='') as f:
@@ -1062,7 +1045,7 @@ def main():
                     'Average_Confidence'
                 ])
 
-        if 'point-e-t' not in method and 'dreamfusion' not in method:
+        if method not in ['dreamfusion','grm','latent-nerf','LucidDreamer_glb','magic3d','mvdream','sjc']:
             gen_type = 'image2shape' 
         else:
             gen_type = 'text2shape'
