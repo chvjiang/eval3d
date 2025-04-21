@@ -7,7 +7,7 @@ metal ball. The images are saved to the output directory.
 Example usage:
     blender -b -P metalball_render_hdr.py -- \
         --output_dir ./output \
-        --light_path light.hdr \
+        --light light.hdr \
 
 Please notify the parameters light_theta / segments / ring_count for render quality
 """
@@ -19,6 +19,13 @@ import os
 import sys
 import bpy
 from mathutils import Vector,Euler
+
+def add_light(light_type="AREA", energy=1000, point=[0.,0.5,0.]):
+    # add a new light
+    bpy.ops.object.light_add(type=light_type.upper(),location=point)
+    light2 = bpy.data.objects[light_type.capitalize()]
+    light2.data.energy = energy
+    # light2.rotation_euler = Euler((math.radians(-90), 0, 0), 'XYZ')
 
 def add_hdri(path, angle = Euler([0.,0.,0.]), bg = Vector([1.,1.,1.,1.])):
     world_node_tree = bpy.context.scene.world.node_tree
@@ -115,16 +122,29 @@ def render_hdr_with_metalball(args):
     reset_scene()
 
     ### modify segments and ring_count for the ball quality
-    bpy.ops.mesh.primitive_uv_sphere_add(radius=1, location=(0, 0, 0), segments=2048, ring_count=1024)
+    bpy.ops.mesh.primitive_uv_sphere_add(radius=1, location=(0, 0, 0), segments=args.quality, ring_count=args.quality//2)
     metal_ball = bpy.context.active_object
     metal_ball.name = "MetalBall"
     create_metal_material(metal_ball, roughness=0.0)
 
     normalize_scene()
     
-    ### modify light theta for the position in hdr
-    light_theta = - math.pi / 2
-    add_hdri(path=args.light_path, angle=Euler([0.,0.,light_theta]))
+    if args.light.endswith('.hdr'):
+        ### modify light theta for the position in hdr
+        light_theta = - math.pi / 2
+        add_hdri(path=args.light, angle=Euler([0.,0.,light_theta]))
+    else:
+        if args.light == 'top':
+            point = [0.5, 0.0, 2.0]
+        elif args.light == 'right':
+            point = [1.0, 2.0, 0.0]
+        elif args.light == 'right_top':
+            point = [1.0, 2.0, 1.0]
+        elif args.light == 'right_bottom':
+            point = [1.0, 2.0, -1.0]
+        else:
+            point = [2.0, 0.0, 0.0]
+        add_light(light_type='point', energy = 500, point = point)
 
     cam, cam_constraint = setup_camera()
     empty = bpy.data.objects.new("Empty", None)
@@ -138,7 +158,7 @@ def render_hdr_with_metalball(args):
     )
     cam.location = point
     os.makedirs(args.output_dir, exist_ok=True)
-    light_name = os.path.splitext(os.path.basename(args.light_path))[0]
+    light_name = os.path.splitext(os.path.basename(args.light))[0]
     render_path = os.path.join(args.output_dir,f'{light_name}.png')
     scene.render.filepath = render_path
     bpy.ops.render.render(write_still=True)
@@ -172,10 +192,10 @@ if __name__ == "__main__":
     render.engine = "CYCLES"
     render.image_settings.file_format = "PNG"
     render.image_settings.color_mode = "RGBA"
-    render.resolution_x = 1024
-    render.resolution_y = 1024
+    render.resolution_x = 512
+    render.resolution_y = 512
     render.resolution_percentage = 100
-    render.film_transparent = False
+    render.film_transparent = True
 
     scene.use_nodes = True
     scene.cycles.device = "GPU"
@@ -189,8 +209,9 @@ if __name__ == "__main__":
     scene.view_settings.view_transform = 'Standard'
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--light_path', type=str, required=True)
+    parser.add_argument('--light', type=str, required=True)
     parser.add_argument('--output_dir', type=str, default='./output')
+    parser.add_argument('--quality', type=int, default=2048)
     argv = sys.argv[sys.argv.index("--") + 1 :]
     args = parser.parse_args(argv)
     render_hdr_with_metalball(args)
