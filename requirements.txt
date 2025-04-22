@@ -1,0 +1,8 @@
+transformers==4.40.1
+av
+imageio
+decord
+opencv-python
+accelerate
+timm
+flash-attn
