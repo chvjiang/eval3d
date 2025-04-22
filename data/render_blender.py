@@ -422,11 +422,8 @@ if __name__ == "__main__":
             d["use"] = not args.cpu
         print(d["name"], d["use"])
 
-    args.object_path = os.path.abspath(args.object_path)
     object_name = os.path.splitext(os.path.basename(args.object_path))[0]
-    dir_name = os.path.basename(os.path.dirname(args.object_path))
-    name = dir_name+'_'+object_name if dir_name else object_name
-    args.output_dir = os.path.join(args.output_dir, name)
+    args.output_dir = os.path.join(args.output_dir, object_name)
     try:
         start_i = time.time()
         save_images(args)

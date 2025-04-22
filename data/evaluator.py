@@ -11,7 +11,7 @@ import numpy as np
 import concurrent.futures
 from datetime import datetime
 import multiprocessing as mp
-import random
+import argparse
 
 #http://35.220.164.252:3888/v1
 #https://boyuerichdata.chatgptten.com/v1/"
@@ -140,12 +140,12 @@ Analyze the video with extreme care and provide scores following the criteria. D
             print(f"Full error details: {str(e)}")
             return None, None
 
-    def evaluate_image(self, image_path, prompt_text=''):
+    def evaluate_image(self, image_path, light=False, prompt_text=''):
         try:
             base64_image = self._encode_image(image_path)
             
             additional_prompt = f'The image shows a 3D model generated from the text prompt: "{prompt_text}".' if prompt_text else ''
-            evaluation_prompt = self.get_evaluation_prompt(additional_prompt=additional_prompt)
+            evaluation_prompt = self.get_evaluation_prompt(light=light, additional_prompt=additional_prompt)
 
             if prompt_text:
                 system_prompt = f"""You are an *exceptionally* strict expert 3D model evaluation system. Your standards are *incredibly* high, and you possess an *uncompromising* eye for even the slightest imperfections. Do not hesitate to penalize flaws, even if they seem minor. Only truly exceptional 3D models that exhibit near-perfect adherence to the reference should receive high scores.
@@ -163,14 +163,9 @@ Analyze *every* view with extreme scrutiny and provide scores following the crit
             else:
                 system_prompt = f"""You are an *exceptionally* strict expert 3D model evaluation system. Your standards are *incredibly* high, and you possess an *uncompromising* eye for even the slightest imperfections. Do not hesitate to penalize flaws, even if they seem minor. Only truly exceptional 3D models that exhibit near-perfect adherence to the reference should receive high scores.
 
-The image shows seven rows of views:
+The image shows two rows of views:
 1. First row (Geometry View): Shows structural and geometric information
 2. Second row (RGB View): Shows colors, materials and textures
-3. Third row (Lighting View): Shows textures under top lighting
-4. Fourth row (Lighting View): Shows textures under right lighting with camera angle down
-5. Fifth row (Lighting View): Shows textures under right lighting with camera angle up
-6. Sixth row (Lighting View): Shows textures under indoor environment lighting
-7. Seventh row (Lighting View): Shows textures under outdoor environment lighting
 
 Each row contains:
 - Original reference image (leftmost)
@@ -178,6 +173,22 @@ Each row contains:
 
 Analyze *every* view with extreme scrutiny and provide scores following the criteria. Demand perfection in your evaluation."""
 
+                system_prompt_light = f"""You are an *exceptionally* strict expert 3D model evaluation system. Your standards are *incredibly* high, and you possess an *uncompromising* eye for even the slightest imperfections. Do not hesitate to penalize flaws, even if they seem minor. Only truly exceptional 3D models that exhibit near-perfect adherence to the reference should receive high scores.
+
+The image shows five rows of views:
+1. First row (Lighting View): Shows textures under top lighting
+2. Second row (Lighting View): Shows textures under right lighting with camera angle down
+3. Third row (Lighting View): Shows textures under right lighting with camera angle up
+4. Fourth row (Lighting View): Shows textures under indoor environment lighting
+5. Fifth row (Lighting View): Shows textures under outdoor environment lighting
+
+Each row contains:
+- Image of the lighting condition, which demonstrates the light source and environment (leftmost)
+- Four different views of the 3D model under corresponding lighting conditions (front, right, back, left)
+
+Analyze *every* view with extreme scrutiny and provide scores following the criteria. Demand perfection in your evaluation."""
+
+            system_prompt = system_prompt_light if light else system_prompt
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[
@@ -375,48 +386,60 @@ Your task is to assess the reliability of each evaluation. Approach this task wi
             print(f"Error in {self.model_name} review: {e}")
             return None
 
-    def get_evaluation_prompt(self, additional_prompt=''):
-        return f"""{additional_prompt} Analyze all seven types of views and provide scores with explanations for:
+    def get_evaluation_prompt(self, light=False, additional_prompt=''):
+        detail_and_color = f"""{additional_prompt} Analyze all types of views and provide scores with explanations for:
 
+1) Detail & Complexity (0-4): This criterion assesses the richness of the texture in terms of its visual details and complexity while maintaining a harmonious balance to prevent overly fancy patterns that may compromise aesthetics. Judgements should primarily focus on *Level of Detail* (Does the texture offer enough fine details that could enhance realism, or is it too simplistic?) and *Balance of Simplicity and Complexity* (Is there a good balance between intricate details and simple areas, avoiding visual overload?)
+Please use Geometry View and RGB View (*ignore geometry defects, focus on details*)  
+- 0: No clear features of textures, no observable detail resolution
+- 1: Very simplistic or overly detailed, with subtle patterns or excessive ornamentation
+- 2: Poor balance between simplicity and intricacy, like inbalance between different surfaces or regions
+- 3: Moderate details with imperfect quality or in improper positions, which slightly affects the overall impressions
+- 4: Suitable details with an optimal visual balance, without any visible defects
 
-1) Consistency & Artifact (0-4): Use all Lighting Views 
-- 0: No clear features of textures
+2) Colorfulness & Saturation (0-4): This evaluates the overall color distribution across the texture and its visual clarity at a glance. Judgements should primarily focus on *Color Diversity* (Are there proper color variations to distinguish features or does the texture look too monotone?), *Saturation* (Are the colors appropriately saturated, neither too muted nor too vibrant?) and *Color Suitability* (Does the hue logically match the reality well and improve its visual effects?)
+Please use Geometry View and RGB View (*ignore geometry defects, focus on colors*)  
+- 0: No clear features of textures, no discernible color features
+- 1: Extremely saturated or colorful, or with an irregular color distribution, which confounds the perceptual clarity
+- 2: Incorrect saturation or lack of color diversity, like a monochromatic appearance that does not suit the object
+- 3: Suitable saturation with imperfect color defects, like some colors that mismatch the reality
+- 4: Excellent colorfulness and easy to interpret, without noticeable color faults
+
+REQUIRED FORMAT:  
+Scores: [X, X]  
+
+Explanations:  
+1. Detail & Complexity (X/4): [Balance details with simplicity (e.g., "rich details but regionally complex")]  
+2. Colorfulness & Saturation (X/4): [Proper Color Distribution and Plausibility (e.g., "monotone or extremely saturated")]  """
+        consistency_and_plausibility = f"""{additional_prompt} Analyze all types of views and provide scores with explanations for:
+
+1) Consistency & Artifact (0-4): This criterion evaluates whether the texture remains uniform and cohesive under different lighting conditions (e.g., indoor / outdoor). Judgements should primarily focus on whether there are *Noticeable Seams or Borders* (specifically whether abrupt changes in shading that break the texture's flow under varying lighting conditions) and *Shading Artifacts* (Are there unnatural lighting streaks or shadows on the surface when illuminated? Are there unreasonable specular highlights appearing when the surface is in dark?)
+Please use all Lighting Views
+- 0: No clear features of textures under varying illumination conditions
 - 1: Large-scale discontinuity such as large area of luminance differences / incorrect highlights / shadows
 - 2: Clear inconsistencies or artifacts in multi-views, such as abrupt brightness changes
 - 3: Minor inconsistencies or minor shading artifacts
 - 4: Perfectly consistent and seamless without shading artifacts
 
-2) Detail & Complexity (0-4): Use Geometry View and RGB View (*ignore plausibility, focus on details*)  
-- 0: No clear features of textures
-- 1: Very simplistic or overly detailed
-- 2: Poor balance between simplicity and intricacy
-- 3: Moderate details with imperfect quality or in improper positions
-- 4: Suitable details with an optimal visual balance
-
-3) Colorfulness & Saturation (0-4): Use Geometry View and RGB View (*ignore plausibility, focus on colors*)  
-- 0: No clear features of textures
-- 1: Extremely saturated or colorful, hard to interpret
-- 2: Incorrect saturation or lack of color diversity
-- 3: Suitable saturation with imperfect color defects
-- 4: Excellent colorfulness and easy to interpret
-
-4) Material Plausibility (0-4): Use indoor and outdoor Lighting Views
-- 0: No clear features of textures
-- 1: Poor reflection behaviors or extreme exposure
-- 2: Incorrect metallic or roughness settings across the texture
+2) Material Plausibility (0-4): This evaluates whether the texture exhibits plausible diffuse and specular lighting effects that align with the real-world material behaviors as specified in the prompt. Judgements should primarily focus on *Metalness* (Does the texture display physically suitable specular lighting effects under natural lighting condition?) and *Roughness* (Does it correctly represent diffuse lighting effects?)
+Please use indoor and outdoor Lighting Views
+- 0: No clear features of textures, no discernible structural features
+- 1: Poor reflection behaviors or extreme exposure due to both incorrect metalness and roughness
+- 2: Incorrect metallic or roughness settings across the texture, which does not suit the object
 - 3: Minor deviation from material specification in prompt
-- 4: Excellent light reflection and plausible exposure
+- 4: Excellent light reflection with plausible exposure and aligns well with reality
 
 REQUIRED FORMAT:  
-Scores: [X, X, X, X]  
+Scores: [X, X]  
 
 Explanations:  
-1. Consistency & Artifact (X/4): [Specify view consistency (e.g., "acceptable front texture but back missing")]  
-2. Detail & Complexity (X/4): [Differentiate details with balance (e.g., "rich details but regionally complex")]  
-3. Colorfulness & Saturation (X/4): [Aesthetic level and Color Plausibility (e.g., "extreme saturated")]  
-4. Material Plausibility (X/4): [Note conflicts (e.g., "texture reflections not realism")]  """
+1. Consistency & Artifact (X/4): [Specify light consistency (e.g., "bright frontal texture but dark in the back")]  
+2. Material Plausibility (X/4): [Note conflicts (e.g., "texture reflections not realism")] """
+        
+        prompt = consistency_and_plausibility if light else detail_and_color
+        return prompt
 
-    def get_review_prompt(self, all_evaluations,additional_prompt=''):
+    def get_review_prompt(self, all_evaluations, additional_prompt=''):
         prompt = f"""{additional_prompt} As an expert reviewer, evaluate the reliability of the following model evaluations.
 
 """        
@@ -662,7 +685,7 @@ class MultiModelEvaluator:
             for model in models
         }
 
-    def evaluate_and_review(self, image_path, prompt_text=''):
+    def evaluate_and_review(self, image_path, light=False, prompt_text=''):
         """执行多模型评估和交叉审查"""
         model_names = list(self.evaluators.keys())
         num_models = len(model_names)
@@ -675,7 +698,7 @@ class MultiModelEvaluator:
                 print(f"\nSubmitting evaluation task for {model_name}...")
                 is_gemini = True if 'flash' in model_name else False
                 if not is_gemini:
-                    future = executor.submit(evaluator.evaluate_image, image_path, prompt_text)
+                    future = executor.submit(evaluator.evaluate_image, image_path, light, prompt_text)
                 else:
                     video_path = image_path.replace('.png', '.mp4').replace('concat_results', 'concat_results_videos')
                     num = image_path.split('/')[-1].split('_')[0]
@@ -895,7 +918,7 @@ class MultiModelEvaluator:
             print(f"Error extracting confidence for {model_name}, dimension {dimension}: {e}")
             return None
 
-def process_image(image_file, api_key, output_dir, is_text_based=False, debug=False):
+def process_image(image_file, api_key, output_dir, light=False, is_text_based=False, debug=False):
     try:
         print(f"\nProcessing {image_file}...")
         prompt_text = ''
@@ -911,8 +934,7 @@ def process_image(image_file, api_key, output_dir, is_text_based=False, debug=Fa
         image_path = image_file
         
         evaluator = MultiModelEvaluator(api_key=api_key, models=["gpt-4o"])
-        print(evaluator)
-        evaluations, reviews, final_scores, source_models, confidence_scores = evaluator.evaluate_and_review(image_path, prompt_text)
+        evaluations, reviews, final_scores, source_models, confidence_scores = evaluator.evaluate_and_review(image_path, light=light, prompt_text=prompt_text)
         
         avg_score = sum(final_scores) / len(final_scores)
         avg_confidence = sum(confidence_scores) / len(confidence_scores)
@@ -1005,7 +1027,7 @@ def process_image(image_file, api_key, output_dir, is_text_based=False, debug=Fa
             "error": str(e)
         }
 
-def main():
+def main(light):
     api_key = "sk-c7nmz7iOglUKwHWxSbSXLThqtZ5VnBPEUYH6xaQgshXvTB3t"
     data_path = './output/concat'
     output_dir = './output/scores'
@@ -1013,7 +1035,7 @@ def main():
     methods = [m for m in os.listdir(data_path) if os.path.isdir(os.path.join(data_path,m))]  
 
     # import ipdb; ipdb.set_trace()
-    for method in ['hunyuan']:#methods:
+    for method in ['3DTopia-XL']:#methods:
         print(f'Processing {method}...')
         
         concat_dir = f'{data_path}/{method}'
@@ -1050,7 +1072,7 @@ def main():
         else:
             gen_type = 'text2shape'
 
-        image_files = [os.path.join(os.path.abspath(concat_dir), f) for f in os.listdir(concat_dir)]
+        image_files = [os.path.join(os.path.abspath(concat_dir), f) for f in os.listdir(concat_dir) if ('rgb' in f and not light) or ('light' in f and light)]
 
         image_files = image_files[:1]
         
@@ -1073,7 +1095,7 @@ def main():
         # assert False
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_image = {
-                executor.submit(process_image, image_file, api_key, output_dir, is_text_based): image_file
+                executor.submit(process_image, image_file, api_key, output_dir, light, is_text_based): image_file
                 for image_file in image_files
             }
             
@@ -1088,8 +1110,12 @@ def main():
         print(f"\nProcessing complete. Results saved to {output_dir}")
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--light', action='store_true')
+    args = parser.parse_args()
+
     print(f"OpenAI version: {openai.__version__}")
     start_time = time.time()
-    main() 
+    main(light=args.light) 
     end_time = time.time()
     print(f"Total time taken: {end_time - start_time} seconds")

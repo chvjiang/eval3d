@@ -1,6 +1,5 @@
 import os
 import json
-from tqdm import tqdm
 import argparse
 
 def find_files(root_dir, extensions = [], recursive = True):
@@ -25,8 +24,9 @@ if __name__=='__main__':
     args.data_dir = os.path.abspath(args.data_dir).rstrip(os.sep)
     obj_paths = find_files(root_dir=args.data_dir, extensions=['.obj','.glb'])
 
+    print(f'find {len(obj_paths):^5} object files in {args.data_dir}')
     paths_dict = {}
-    for obj_path in tqdm(obj_paths):
+    for obj_path in obj_paths:
         paths_dict[obj_path] = 0    # 0 means the obj is not rendered
     
     name = os.path.basename(args.data_dir)
