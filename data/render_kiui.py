@@ -19,7 +19,10 @@ from kiui.mesh import Mesh
 from kiui.cam import OrbitCamera
 from kiui.op import safe_normalize
 
-def rotate_mesh(mesh, axis='y', angle_degrees=0):
+X270 = ['dreamfusion','grm','grm_sv3d','latent-nerf','LucidDreamer_glb','magic3d','magic123','mvdream','OpenLRM','sjc','SyncDreamer','sz123','TriplaneGaussian_glb','triposr','z123']
+X90 = ['InstantMesh',]
+
+def rotate_mesh(mesh, axis='y', angle_degrees=90):
     angle = np.radians(angle_degrees)
     vertices = mesh.v.clone()
     
@@ -74,7 +77,10 @@ class GUI:
         # load mesh
         try:
             self.mesh = Mesh.load(opt.mesh, front_dir=opt.front_dir)
-            # self.mesh = rotate_mesh(self.mesh, axis='x', angle_degrees=-90)
+            if os.path.basename(os.path.dirname(opt.mesh)) in X90:
+                self.mesh = rotate_mesh(self.mesh, axis='x', angle_degrees=90)
+            elif os.path.basename(os.path.dirname(opt.mesh)) in X270:
+                self.mesh = rotate_mesh(self.mesh, axis='x', angle_degrees=270)
         except Exception as e:
             self.mesh = None
             with open('e.log','a') as f:
