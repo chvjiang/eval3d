@@ -44,12 +44,13 @@ class ModelEvaluator:
         with open(video_path, "rb") as video_file:
             return base64.b64encode(video_file.read()).decode('utf-8')
 
-    def evaluate_video(self, reference_image_path, video_path, prompt_text=''):
+    def evaluate_video(self, reference_image_path, video_path, light=False, prompt_text=''):
         try:
             base64_video = self._encode_video(video_path)
             base64_image = self._encode_image(reference_image_path)
 
-            evaluation_prompt = self.get_evaluation_prompt(additional_prompt=f'The video shows multiple views of a 3D model generated from the text prompt: "{prompt_text}".')
+            additional_prompt = f'The video shows multiple views of a 3D model generated from the text prompt: "{prompt_text}".' if prompt_text else ''
+            evaluation_prompt = self.get_evaluation_prompt(light=light, additional_prompt=additional_prompt)
 
             if prompt_text:
                 system_prompt = f"""You are an exceptionally strict expert 3D model evaluation system. Your analysis demands the highest level of scrutiny, and you should not hesitate to deduct points for even minor imperfections. Only models that demonstrate near-flawless execution across all criteria deserve high scores.
@@ -87,16 +88,26 @@ Analyze the video with extreme care and provide scores following the criteria. D
                     max_tokens=2000
                 )
             else:
-                print(f'It is image based 3D model.')
-                system_prompt = f"""You are an exceptionally strict expert 3D model evaluation system. Your analysis demands the highest level of scrutiny, and you should not hesitate to deduct points for even minor imperfections. Only models that demonstrate near-flawless execution across all criteria deserve high scores.
+                system_prompt = f"""You are an *exceptionally* strict expert 3D model evaluation system. Your standards are *incredibly* high, and you possess an *uncompromising* eye for even the slightest imperfections. Do not hesitate to penalize flaws, even if they seem minor. Only truly exceptional 3D models that exhibit near-perfect adherence to the reference should receive high scores.
 
-The video shows a 3D model rotating from left to right with three types of views:
+The video shows a 3D model rotating from left to right with two types of views:
 1. Geometry View: Shows structural and geometric information
-2. Normal Map View: Shows surface details and geometric features
-3. RGB View: Shows colors, materials and textures
+2. RGB View: Shows colors, materials and textures
 
-Analyze the video with extreme care and provide scores following the criteria. Demand excellence in every aspect of the evaluation."""
+Analyze the video with extreme scrutiny and provide scores following the criteria. Demand perfection in your evaluation."""
 
+                system_prompt_light = f"""You are an *exceptionally* strict expert 3D model evaluation system. Your standards are *incredibly* high, and you possess an *uncompromising* eye for even the slightest imperfections. Do not hesitate to penalize flaws, even if they seem minor. Only truly exceptional 3D models that exhibit near-perfect adherence to the reference should receive high scores.
+
+The video shows a 3D model rotating from left to right with five types of views:
+1. Lighting View: Shows textures under top lighting
+2. Lighting View: Shows textures under right lighting with camera angle down
+3. Lighting View: Shows textures under right lighting with camera angle up
+4. Lighting View: Shows textures under indoor environment lighting
+5. Lighting View: Shows textures under outdoor environment lighting
+
+Analyze the video with extreme scrutiny and provide scores following the criteria. Demand perfection in your evaluation."""
+
+                system_prompt = system_prompt_light if light else system_prompt
                 response = self.client.chat.completions.create(
                     model=self.model_name,
                     messages=[
@@ -425,7 +436,7 @@ Please use all Lighting Views
 Please use indoor and outdoor Lighting Views
 - 0: No clear features of textures, no discernible structural features
 - 1: Poor reflection behaviors or extreme exposure due to both incorrect metalness and roughness
-- 2: Incorrect metallic or roughness settings across the texture, which does not suit the object
+- 2: Incorrect metallic or roughness settings, or unsuitable exposure that reduces visual effects
 - 3: Minor deviation from material specification in prompt
 - 4: Excellent light reflection with plausible exposure and aligns well with reality
 
@@ -678,7 +689,7 @@ class MultiModelEvaluator:
     def __init__(self, api_key, models=None):
         """初始化多模型评估系统"""
         if models is None:
-            models = ["gpt-4o","claude-3-7-sonnet-latest", "gemini-2.0-flash"]#,"grok-3"]["gemini-2.0-flash"]#
+            models = ["gpt-4o","claude-3-7-sonnet-latest", "gemini-2.0-pro"]#,"grok-3"]["gemini-2.0-flash"]#
         
         self.evaluators = {
             model: ModelEvaluator(model, api_key)
@@ -696,14 +707,14 @@ class MultiModelEvaluator:
             futures = {}
             for model_name, evaluator in self.evaluators.items():
                 print(f"\nSubmitting evaluation task for {model_name}...")
-                is_gemini = True if 'flash' in model_name else False
+                is_gemini = True if 'gemini' in model_name else False
                 if not is_gemini:
                     future = executor.submit(evaluator.evaluate_image, image_path, light, prompt_text)
                 else:
                     video_path = image_path.replace('.png', '.mp4').replace('concat_results', 'concat_results_videos')
-                    num = image_path.split('/')[-1].split('_')[0]
-                    ref_img_path = f"/mnt/petrelfs/zhuolong/code/3DEval/3dgen_bench_dataset/gallery/images_prompts_510/{num}.png"
-                    future = executor.submit(evaluator.evaluate_video, ref_img_path, video_path, prompt_text)
+                    num = image_path.split('/')[-1].split('.')[0].split('_')[0]
+                    ref_img_path = f"/tos-bjml-mllm/chuziyang/eval3d/prompts/rgba510/{num}.png"
+                    future = executor.submit(evaluator.evaluate_video, ref_img_path, video_path, light, prompt_text)
                 futures[model_name] = future
 
             for model_name, future in futures.items():
@@ -728,7 +739,7 @@ class MultiModelEvaluator:
                     future = executor.submit(evaluator.review_evaluation, image_path, evaluations, prompt_text)
                 else:
                     video_path = image_path.replace('.png', '.mp4').replace('concat_results', 'concat_results_videos')
-                    num = image_path.split('/')[-1].split('_')[0]
+                    num = image_path.split('/')[-1].split('.')[0].split('_')[0]
                     ref_img_path = f"/mnt/petrelfs/zhuolong/code/3DEval/3dgen_bench_dataset/gallery/images_prompts_510/{num}.png"
                     future = executor.submit(evaluator.review_evaluation_video,ref_img_path,  video_path, evaluations, prompt_text)
                 futures[model_name] = future
@@ -933,7 +944,7 @@ def process_image(image_file, api_key, output_dir, light=False, is_text_based=Fa
         #     return 
         image_path = image_file
         
-        evaluator = MultiModelEvaluator(api_key=api_key, models=["gpt-4o"])
+        evaluator = MultiModelEvaluator(api_key=api_key, models=["gemini-2.0-pro"])#"gpt-4o"])
         evaluations, reviews, final_scores, source_models, confidence_scores = evaluator.evaluate_and_review(image_path, light=light, prompt_text=prompt_text)
         
         avg_score = sum(final_scores) / len(final_scores)
@@ -1029,13 +1040,13 @@ def process_image(image_file, api_key, output_dir, light=False, is_text_based=Fa
 
 def main(light):
     api_key = "sk-c7nmz7iOglUKwHWxSbSXLThqtZ5VnBPEUYH6xaQgshXvTB3t"
-    data_path = './output/concat'
+    data_path = './output/videos'
     output_dir = './output/scores'
     os.makedirs(output_dir, exist_ok=True)
     methods = [m for m in os.listdir(data_path) if os.path.isdir(os.path.join(data_path,m))]  
 
     # import ipdb; ipdb.set_trace()
-    for method in ['3DTopia-XL']:#methods:
+    for method in ['spard_glb']:#methods:
         print(f'Processing {method}...')
         
         concat_dir = f'{data_path}/{method}'
