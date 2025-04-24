@@ -21,6 +21,19 @@ from kiui.op import safe_normalize
 
 X270 = ['dreamfusion','grm','grm_sv3d','latent-nerf','LucidDreamer_glb','magic3d','magic123','mvdream','OpenLRM','sjc','SyncDreamer','sz123','TriplaneGaussian_glb','triposr','z123']
 X90 = ['InstantMesh',]
+Y180 = ['crm','spard_glb','Wonder3D',]
+Y90 = ['grm_sv3d',]
+Y270 = ['dreamfusion','InstantMesh','latent-nerf','LucidDreamer_glb','magic3d','magic123','mvdream','SyncDreamer','sz123','TriplaneGaussian_glb','triposr','z123']
+
+def compute_face_normals(vertices, faces):
+    v0 = vertices[faces[:, 0]]  # [F, 3]
+    v1 = vertices[faces[:, 1]]  # [F, 3]
+    v2 = vertices[faces[:, 2]]  # [F, 3]
+    edge1 = v1 - v0  # [F, 3]
+    edge2 = v2 - v0  # [F, 3]
+    face_normals = torch.cross(edge1, edge2, dim=-1)  # [F, 3]
+    face_normals = F.normalize(face_normals, p=2, dim=-1)  # [F, 3]
+    return face_normals.to(torch.int32)
 
 def rotate_mesh(mesh, axis='y', angle_degrees=90):
     angle = np.radians(angle_degrees)
@@ -48,6 +61,21 @@ def rotate_mesh(mesh, axis='y', angle_degrees=90):
         raise ValueError("Axis must be 'x', 'y', or 'z'")
     rot = torch.tensor(rot, device=vertices.device, dtype=vertices.dtype)
     mesh.v = vertices @ rot.T
+
+    if hasattr(mesh, 'vn'):
+        mesh.vn = mesh.vn @ rot.T
+        mesh.vn = F.normalize(mesh.vn, p=2, dim=-1)
+    
+    if hasattr(mesh, 'f'):
+        mesh.fn = compute_face_normals(mesh.v, mesh.f)
+    
+    if hasattr(mesh, 'tangent'):
+        mesh.tangent = mesh.tangent @ rot.T
+        mesh.tangent = F.normalize(mesh.tangent, p=2, dim=-1)
+    if hasattr(mesh, 'bitangent'):
+        mesh.bitangent = mesh.bitangent @ rot.T
+        mesh.bitangent = F.normalize(mesh.bitangent, p=2, dim=-1)
+
     return mesh
 
 class GUI:
@@ -76,11 +104,20 @@ class GUI:
         
         # load mesh
         try:
+
             self.mesh = Mesh.load(opt.mesh, front_dir=opt.front_dir)
-            if os.path.basename(os.path.dirname(opt.mesh)) in X90:
+            method = os.path.basename(os.path.dirname(opt.mesh))
+            if method in X90:
                 self.mesh = rotate_mesh(self.mesh, axis='x', angle_degrees=90)
-            elif os.path.basename(os.path.dirname(opt.mesh)) in X270:
+            elif method in X270:
                 self.mesh = rotate_mesh(self.mesh, axis='x', angle_degrees=270)
+            if method in Y180:
+                self.mesh = rotate_mesh(self.mesh, axis='y', angle_degrees=90)
+            elif method in Y90:
+                self.mesh = rotate_mesh(self.mesh, axis='y', angle_degrees=90)
+            elif method in Y270:
+                self.mesh = rotate_mesh(self.mesh, axis='y', angle_degrees=270)
+
         except Exception as e:
             self.mesh = None
             with open('e.log','a') as f:
@@ -575,4 +612,5 @@ if __name__ == '__main__':
             os.makedirs(os.path.join(save_path_root,opt.mode,sub_path),exist_ok=True)
             opt.save_video = os.path.join(save_path_root,opt.mode,sub_path,obj_name)
         kiui_render(opt)
+        break
         
