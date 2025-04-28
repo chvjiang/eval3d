@@ -26,7 +26,7 @@ class ModelEvaluator:
         )
         # self.doc_content = self._read_pdf(pdf_path)
         
-        with open('./output/scores/example.json','r') as f:
+        with open('./data/example.json','r') as f:
             example_data = json.load(f)
 
         self.example_prompt = f"""
@@ -41,7 +41,7 @@ class ModelEvaluator:
 
 # Example for 3D Model Evaluation
 
-Below is 3 examples, structed in json format, of human annotation ground truth scores and model-generated evaluation scores for three 3D models (example-1: excellent, example-2: good, example-3: bad), along with detailed analysis and evidences. 
+Below is 3 examples, structed in json format, of human annotation ground truth scores and model-generated evaluation scores for three 3D models, along with detailed analysis and evidences. 
 
 {example_data}
 
@@ -61,7 +61,6 @@ Remember: Your objective is to align with human scoring standards and emulate hu
 """
     
     def _fix_json_quotes(self, content):
-        """??JSON??????"""
         result = []
         in_string = False
         escape_next = False
@@ -86,18 +85,14 @@ Remember: Your objective is to align with human scoring standards and emulate hu
             else:
                 result.append(char)
         
-        # ???????????????
         if in_string:
             result.append('"')
         
         return ''.join(result)
 
     def _fix_common_json_issues(self, content):
-        """?????JSON????"""
-        # ??????
         content = ''.join(char for char in content if ord(char) >= 32)
         
-        # ?????????
         content = content.replace('",}', '"}')
         content = content.replace('",]', '"]')
         content = content.replace(',}', '}')
@@ -105,7 +100,6 @@ Remember: Your objective is to align with human scoring standards and emulate hu
         content = content.replace('}.}', '}}')
         content = content.replace('}.]}', '}]}')
         
-        # ?????????
         import re
         content = re.sub(r'([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":', content)
         
@@ -133,7 +127,7 @@ Remember: Your objective is to align with human scoring standards and emulate hu
     def evaluate_video(self, reference_image_path, video_path, prompt_text=''):
         max_retries = 3
         retry_count = 0
-        start_time = time.time()  # ??????
+        start_time = time.time()
         
         while retry_count < max_retries:
             try:
@@ -151,7 +145,7 @@ Remember: Your objective is to align with human scoring standards and emulate hu
 
                 system_prompt = f"""
 # Role and Objective
-You are a strict expert 3D model evaluation system with deep expertise in computer graphics, material analysis, and visual quality assessment. This evaluation concerns a video of a 3D model generated from the provided {info}. Your analysis requires the highest level of scrutiny. Deduct points for even minor imperfections without hesitation. Only models demonstrating near-flawless execution across all criteria deserve top scores.
+You are a strict expert 3D model evaluation system with deep expertise in material analysis, and visual quality assessment. This evaluation concerns a video of a 3D model generated from the provided {info}. Your analysis requires the highest level of scrutiny. Deduct points for even minor imperfections without hesitation. Only models demonstrating near-flawless execution across all criteria deserve top scores.
 
 # Video Content Description
 The video presents a 3D model rotating smoothly from left to right, showcasing seven distinct view types:
@@ -259,7 +253,7 @@ Begin your detailed evaluation now.
                 ref_image_prompt = ' Original reference image / Lighting condition image (leftmost) and' if not prompt_text else ' Lighting condition image (leftmost) and'
                 additional_prompt = f'The image shows a 3D model generated from the text prompt: "{prompt_text}".' if prompt_text else ''
                 system_prompt = f"""# Role and Objective
-    You are an expert 3D model evaluation system with extensive experience in computer graphics, material analysis, and visual quality assessment. Your goal is to provide precise, consistent, and well-reasoned evaluations of 3D models.
+    You are an expert 3D model evaluation system with extensive experience in material analysis, and visual quality assessment. Your goal is to provide precise, consistent, and well-reasoned evaluations of 3D models.
 
     # Core Instructions
     - Maintain extremely high standards for evaluation
@@ -273,7 +267,8 @@ Begin your detailed evaluation now.
     - Geometry View: Structural and geometric information
     - RGB View: Colors, materials and textures
     - Light View: Reflection effects under lights
-    2 The provided image shows seven rows of views:
+
+    2. The provided image shows seven rows of views:
     2.1 First row (Geometry View): Shows structural and geometric information
     2.2 Second row (RGB View): Shows colors, materials and textures
     2.3 Third row (Lighting View): Shows textures under top lighting
@@ -281,7 +276,7 @@ Begin your detailed evaluation now.
     2.5 Fifth row (Lighting View): Shows textures under right lighting with camera angle up
     2.6 Sixth row (Lighting View): Shows textures under indoor environment lighting
     2.7 Seventh row (Lighting View): Shows textures under outdoor environment lighting
-    2.8 Each row contains:{ref_image_prompt} Four different views of the 3D model (front, right, back, left)
+    Each row contains:{ref_image_prompt} Four different views of the 3D model (front, right, back, left)
     
     3. For each view:
     - Analyze front, right, back, and left perspectives
@@ -441,8 +436,8 @@ You should evaluate the 3D model based on the following criteria:
 Please use Geometry View and RGB View (*ignore geometry defects, focus on details*)  
 - 0: No clear features of textures, no observable detail resolution
 - 1: Very simplistic or overly detailed, with subtle patterns or excessive ornamentation
-- 2: Poor balance between simplicity and intricacy, like inbalance between different surfaces or regions
-- 3: Moderate details with imperfect quality or in improper positions, which slightly affects the overall impressions
+- 2: Poor balance between simplicity and intricacy, like inbalance between different surfaces or regions, or imperfect quality or in improper positions
+- 3: Moderate details with only little defects that slightly affect the overall impressions
 - 4: Suitable details with an optimal visual balance, without any visible defects
 
 2) Colorfulness & Saturation (0-4): This evaluates the overall color distribution across the texture and its visual clarity at a glance. Judgements should primarily focus on *Color Diversity* (Are there proper color variations to distinguish features or does the texture look too monotone?), *Saturation* (Are the colors appropriately saturated, neither too muted nor too vibrant?) and *Color Suitability* (Does the hue logically match the reality well and improve its visual effects?)
@@ -450,15 +445,15 @@ Please use Geometry View and RGB View (*ignore geometry defects, focus on colors
 - 0: No clear features of textures, no discernible color features
 - 1: Extremely saturated or colorful, or with an irregular color distribution, which confounds the perceptual clarity
 - 2: Incorrect saturation or lack of color diversity, like a monochromatic appearance that does not suit the object
-- 3: Suitable saturation with imperfect color defects, like some colors that mismatch the reality
+- 3: Suitable saturation with only little color defects, like only little colors that mismatch the reality
 - 4: Excellent colorfulness and easy to interpret, without noticeable color faults  
 
 3) Consistency & Artifact (0-4): This criterion evaluates whether the texture remains uniform and cohesive under different lighting conditions (e.g., indoor / outdoor). Judgements should primarily focus on whether there are *Noticeable Seams or Borders* (specifically whether abrupt changes in shading that break the texture's flow under varying lighting conditions) and *Shading Artifacts* (Are there unnatural lighting streaks or shadows on the surface when illuminated? Are there unreasonable specular highlights appearing when the surface is in dark?)
 Please use all Lighting Views
 - 0: No clear features of textures under varying illumination conditions
-- 1: Large-scale discontinuity such as large area of luminance differences / incorrect highlights / shadows
+- 1: Large-scale discontinuity such as large area of luminance differences / incorrect highlights / black shadows
 - 2: Clear inconsistencies or artifacts in multi-views, such as abrupt brightness changes
-- 3: Minor inconsistencies or minor shading artifacts
+- 3: Only little inconsistencies or shading artifacts which are very imperceptible
 - 4: Perfectly consistent and seamless without shading artifacts
 
 4) Material Plausibility (0-4): This evaluates whether the texture exhibits plausible diffuse and specular lighting effects that align with the real-world material behaviors as specified in the prompt. Judgements should primarily focus on *Metalness* (Does the texture display physically suitable specular lighting effects under natural lighting condition?) and *Roughness* (Does it correctly represent diffuse lighting effects?)
@@ -466,7 +461,7 @@ Please use indoor and outdoor Lighting Views
 - 0: No clear features of textures, no discernible structural features
 - 1: Poor reflection behaviors or extreme exposure due to both incorrect metalness and roughness
 - 2: Incorrect metallic or roughness settings, or unsuitable exposure that reduces visual effects
-- 3: Minor deviation from material specification in prompt
+- 3: Only little difference from material specification in prompt
 - 4: Excellent light reflection with plausible exposure and aligns well with reality
 
 # Evaluation Process
@@ -490,7 +485,7 @@ First, let's examine each view type carefully and document our observations:
    - Document specific observations
 
 3. Light View Analysis:
-   - Are there any inconsistencies?
+   - What is the lighting effect under each condition?
    - What is the quality of reflection effects of the material?
    - Does the lighting reflections align well with reality?
    - Document specific observations
@@ -498,7 +493,7 @@ First, let's examine each view type carefully and document our observations:
 ## Verification Phase
 For each dimension, let's verify our initial assessment:
 
-1) Detail & Complexity (0-4):
+X) Dimension (0-4):
    a) Initial Assessment:
       - List key observations
       - Note potential issues
@@ -512,13 +507,6 @@ For each dimension, let's verify our initial assessment:
    
    c) Final Score Determination:
       [Review criteria and justify score with specific evidence]
-      - 0: No clear features
-      - 1: Overly simplistic or detailed
-      - 2: Inbalance between simplicity and intricacy
-      - 3: imperfect quality or in improper positions
-      - 4: Suitable details with balance
-
-[Similar detailed breakdown for other dimensions...]
 
 ## Final Reflection
 Before submitting scores:
@@ -538,6 +526,10 @@ IMPORTANT:
 - Include ALL fields
 - Use proper JSON syntax
 - No additional text before or after JSON
+
+Please note that EVERY VIEW should be evaluated and the score should be deducted if ANY VIEW shows defects.
+For lighting views, please note that ONLY HIGH QUALITY TEXTURES deserve score of 3 and above.
+Please be more strict and give more low scores like 1 or 0.
    """
         return prompt
 
@@ -563,9 +555,6 @@ IMPORTANT:
                 print(f"First JSON parse attempt failed: {e}")
                 result = self._fix_common_json_issues(content)
                 review_json = json.loads(content)
-            
-            # result = json.loads()
-            # result = dict(response.choices[0].message.content) #json.dumps(response.model_dump(), indent=2)
             
             scores = [
                 result["scores"]["Detail & Complexity"]["score"],
@@ -680,7 +669,6 @@ IMPORTANT:
 
 class MultiModelEvaluator:
     def __init__(self, api_key, models=None):
-        """初始化多模型评估系统"""
         if models is None:
             models = ["gpt-4o","claude-3-7-sonnet-latest", "gemini-2.0-pro"]#,"grok-3"]["gemini-2.0-flash"]#
         
@@ -741,32 +729,24 @@ class MultiModelEvaluator:
         confidence_matrix = np.zeros((4, len(model_names)))
         scores_matrix = np.zeros((4, len(model_names)))
         
-        # 填充分数矩阵
         for i, model_name in enumerate(model_names):
             if model_name in evaluations:
                 scores_matrix[:, i] = evaluations[model_name]["scores"]
         
-        # 计算每个维度的置信度
         for dim in range(4):
             for i, model_name in enumerate(model_names):
-                # 获取该维度的所有置信度评分
                 dim_confidences = []
                 for reviewer_name, review in reviews.items():
                     try:
                         confidence = self._extract_confidence_from_json(review, model_name, dim)
-                        # if 'flash' in model_name:
-                        #     # 对flash模型进行加权
-                        #     confidence *= 1.2
                         if confidence is not None:
                             dim_confidences.append(confidence)
                     except Exception as e:
                         print(f"Error extracting confidence: {e}")
                 
-                # 计算平均置信度
                 if dim_confidences:
                     confidence_matrix[dim, i] = np.mean(dim_confidences)
         
-        # 选择每个维度置信度最高的评分
         final_scores = []
         source_models = []  # 记录每个维度的分数来自哪个模型
         confidence_scores = []  # 记录每个维度的置信度
@@ -853,8 +833,9 @@ def process_image(evaluator, image_file, output_dir, is_text_based=False, debug=
         image_path = image_file
         dir_name = os.path.basename(os.path.dirname(image_path))
         image_id = os.path.splitext(os.path.basename(image_path))[0]
-        output_file = os.path.join(output_dir, f"{dir_name}_{image_id}.json")
-        model_output_dir = os.path.join(output_dir, f"{dir_name}_{image_id}")
+        os.makedirs(os.path.join(output_dir, dir_name), exist_ok=True)
+        output_file = os.path.join(output_dir, dir_name, f"{image_id}_summary.json")
+        model_output_dir = os.path.join(output_dir, dir_name)
         os.makedirs(model_output_dir, exist_ok=True)
 
         prompt_text = ''
@@ -867,7 +848,7 @@ def process_image(evaluator, image_file, output_dir, is_text_based=False, debug=
         evaluations, reviews, final_scores, source_models, confidence_scores, model_times = evaluator.evaluate_and_review(image_path, prompt_text=prompt_text, model_output_dir=model_output_dir)
         for model_name, evaluation in evaluations.items():
             safe_model_name = model_name.replace('/', '_')
-            model_json_path = os.path.join(model_output_dir, f"{safe_model_name}_evaluation.json")
+            model_json_path = os.path.join(model_output_dir, f"{image_id}_{safe_model_name}_evaluation.json")
             
             model_data = {
                 "model": model_name,
@@ -926,7 +907,6 @@ def process_image(evaluator, image_file, output_dir, is_text_based=False, debug=
                 },
                 "average_score": float(avg_score),
                 "average_confidence": float(avg_confidence),
-                # "timestamp": datetime.now().isoformat()
             },
             "model_evaluations": evaluations,
             "model_reviews": reviews,
@@ -1000,9 +980,9 @@ def main(args):
     api_key = "sk-c7nmz7iOglUKwHWxSbSXLThqtZ5VnBPEUYH6xaQgshXvTB3t"
     models = [
         "gpt-4o",
-        "claude-3-7-sonnet-20250219",
+        # "claude-3-7-sonnet-20250219",
         "gemini-2.0-flash",
-        "grok-3",
+        # "grok-3",
     ]
     evaluator = MultiModelEvaluator(api_key=api_key, models=models)
 
@@ -1011,7 +991,16 @@ def main(args):
     os.makedirs(output_dir, exist_ok=True)
     methods = [m for m in os.listdir(data_path) if os.path.isdir(os.path.join(data_path,m))]  
 
-    for method in [args.method]:#methods:
+    import csv
+    methods, indexs = [], []
+    with open('.csv') as f:
+        reader = csv.reader(f)
+        for row in reader:
+            if len(row[1]) < 5:
+                methods.append(row[0])
+                indexs.append(row[1])
+
+    for method, index in zip(methods, indexs):
         print(f'Processing {method}...')
         
         concat_dir = f'{data_path}/{method}'
@@ -1047,7 +1036,7 @@ def main(args):
 
         image_files = [os.path.join(os.path.abspath(concat_dir), f) for f in os.listdir(concat_dir)]
 
-        image_files = [random.choice(image_files)]
+        image_files = [os.path.join(concat_dir,f'{index}.png')]#[random.choice(image_files)]
 
         results = []
         if gen_type == 'text2shape':
