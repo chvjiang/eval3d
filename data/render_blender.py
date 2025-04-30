@@ -279,14 +279,8 @@ def save_images(args) -> None:
     else:
         load_object(args.object_path)
     
-    print(bpy.data.objects.keys())
-    for key in bpy.data.objects.keys():
-        if key in ['Camera','Light','world']:
-            continue
-        else:
-            break
-
-    obj = bpy.data.objects[key]
+    mesh_objects = [obj for obj in bpy.context.scene.objects if obj.type == 'MESH']
+    obj = mesh_objects[-1]
     # normalize_obj(obj)
     obj.rotation_mode = 'XYZ'
     obj.rotation_euler = (math.radians(args.rotation_x),
@@ -370,7 +364,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--object_path", type=str, required=True, help="Path to the object file")
     parser.add_argument('--light_path', type=str, help='Path to the light file')
-    parser.add_argument('--light_type', type=str, choices=["top", "right_top", "right_bottom"])
+    parser.add_argument('--light_type', type=str, choices=["top", "right", "right_top", "right_bottom"])
     parser.add_argument("--output_dir", type=str, default="./output")
     parser.add_argument("--mode", type=str, default="object", choices=["light", "object"])
     parser.add_argument("--num_images", type=int, default=1)
@@ -423,6 +417,7 @@ if __name__ == "__main__":
         print(d["name"], d["use"])
 
     object_name = os.path.splitext(os.path.basename(args.object_path))[0]
+
     args.output_dir = os.path.join(args.output_dir, object_name)
     try:
         start_i = time.time()
