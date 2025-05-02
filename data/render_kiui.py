@@ -612,5 +612,5 @@ if __name__ == '__main__':
             os.makedirs(os.path.join(save_path_root,opt.mode,sub_path),exist_ok=True)
             opt.save_video = os.path.join(save_path_root,opt.mode,sub_path,obj_name)
         kiui_render(opt)
-        break
+        # break
         

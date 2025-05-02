@@ -13,18 +13,29 @@ from datetime import datetime
 import multiprocessing as mp
 import argparse
 import random
+from google.genai import types
+from PIL import Image
+from io import BytesIO
+from google import genai
 
-#http://35.220.164.252:3888/v1
-#https://boyuerichdata.chatgptten.com/v1/"
+# os.environ["http_proxy"] = "http://10.1.20.57:23128/"
+# os.environ["https_proxy"] = "http://10.1.20.57:23128/"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "./data/proxy.json"
 
 class ModelEvaluator:
-    def __init__(self, model_name, api_key, base_url="https://boyuerichdata.chatgptten.com/v1/", pdf_path="evaluation_doc.pdf"):
+    def __init__(self, model_name, api_key, base_url="http://35.220.164.252:3888/v1"):
         self.model_name = model_name
-        self.client = OpenAI(
-            base_url=base_url,
-            api_key=api_key
-        )
-        # self.doc_content = self._read_pdf(pdf_path)
+        if 'gemini' in model_name:
+            self.client = genai.Client(
+                vertexai=True,
+                project="czby-gcp250427",
+                location="us-central1",
+            )
+        else:
+            self.client = OpenAI(
+                base_url=base_url,
+                api_key=api_key
+            )
         
         with open('./data/example.json','r') as f:
             example_data = json.load(f)
@@ -105,140 +116,146 @@ Remember: Your objective is to align with human scoring standards and emulate hu
         
         return content
 
-    def _read_pdf(self, pdf_path):
-        try:
-            doc = fitz.open(pdf_path)
-            content = ""
-            for page in doc:
-                content += page.get_text()
-            return content
-        except Exception as e:
-            print(f"Error reading PDF: {e}")
-            return ""
-
     def _encode_image(self, image_path):
         with open(image_path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode('utf-8')
     
     def _encode_video(self, video_path):
-        with open(video_path, "rb") as video_file:
-            return base64.b64encode(video_file.read()).decode('utf-8')
+        base64_video = []   
+        imgs = os.listdir(video_path)
+        for img in imgs:
+            img_path = os.path.join(video_path, img)
+            with open(img_path, "rb") as image_file:
+                base64_video.append(base64.b64encode(image_file.read()).decode('utf-8'))
+        return base64_video
 
-    def evaluate_video(self, reference_image_path, video_path, prompt_text=''):
+    def evaluate_video(self, video_path, prompt_text=''):
         max_retries = 3
         retry_count = 0
         start_time = time.time()
         
         while retry_count < max_retries:
             try:
-                base64_video = self._encode_video(video_path)
-                top_p = 0.8 if self.model_name != 'o3' and self.model_name != 'o4-mini' else None
-                temperature = 0.3 if self.model_name != 'o4-mini' else None                
+                # base64_video = self._encode_video(video_path)
+                base64_video = open(video_path, 'rb').read()
 
                 additional_prompt = f'The video shows multiple views of a 3D model generated from the text prompt: "{prompt_text}".' if prompt_text else 'The video shows multiple views of a 3D model generated from the reference image.'
                 evaluation_prompt = self.get_evaluation_prompt(additional_prompt=additional_prompt)
 
-                if reference_image_path and not prompt_text:
-                    base64_image = self._encode_image(reference_image_path)
-
                 info = f'text prompt: "{prompt_text}"' if prompt_text else 'reference image'
+                ref_image_prompt = "2.0 Left most column: reference image" if not prompt_text else ""
+                system_prompt = f"""# Role and Objective
+    You are an expert 3D model evaluation system with deep expertise in material analysis, and visual quality assessment. This evaluation concerns a video of a 3D model generated from the provided {info}. Your analysis requires the highest level of scrutiny. Deduct points for even minor imperfections without hesitation. Only models demonstrating near-flawless execution across all criteria deserve top scores.
 
-                system_prompt = f"""
-# Role and Objective
-You are a strict expert 3D model evaluation system with deep expertise in material analysis, and visual quality assessment. This evaluation concerns a video of a 3D model generated from the provided {info}. Your analysis requires the highest level of scrutiny. Deduct points for even minor imperfections without hesitation. Only models demonstrating near-flawless execution across all criteria deserve top scores.
+    # Core Instructions
+    - Maintain extremely high standards for evaluation
+    - Identify and penalize even minor imperfections
+    - Follow a systematic analysis approach for each criterion
+    - Provide clear evidence for all assessments
+    - Think step-by-step through each evaluation dimension
 
-# Video Content Description
-The video presents a 3D model rotating smoothly from left to right, showcasing seven distinct view types:
-1. Geometry View: Shows structural and geometric information
-2. RGB View: Shows colors, materials and textures
-3. Lighting View: Shows textures under top lighting
-4. Lighting View: Shows textures under right lighting with camera angle down
-5. Lighting View: Shows textures under right lighting with camera angle up
-6. Lighting View: Shows textures under indoor environment lighting
-7. Lighting View: Shows textures under outdoor environment lighting
+    # Analysis Framework
+    1. Examine each view type systematically:
+    - Geometry View: Structural and geometric information
+    - RGB View: Colors, materials and textures
+    - Light View: Reflection effects under lights
 
-# Evaluation Instructions
-- Analyze the video meticulously, examining each view type in detail.
-- Assess the model's material, texture, and visual appearance critically.
-- Identify and document any flaws, inconsistencies, or artifacts.
-- Provide clear, evidence-backed reasoning for every deduction or score.
-- Maintain a professional and objective tone throughout your evaluation.
-- Demand excellence in every aspect of the evaluation and score accordingly.
+    2. The video presents a rotating 3D model, showcasing distinct view types:
+    {ref_image_prompt}
+    2.1 First column (Geometry View): Shows structural and geometric information
+    2.2 Second column (RGB View): Shows colors, materials and textures
+    2.3 Third column (Lighting View): Shows textures under top lighting
+    2.4 Fourth column (Lighting View): Shows textures under right lighting with camera angle down
+    2.5 Fifth column (Lighting View): Shows textures under right lighting with camera angle up
+    2.6 Sixth column (Lighting View): Shows textures under indoor environment lighting
+    2.7 Seventh column (Lighting View): Shows textures under outdoor environment lighting
 
-{self.example_prompt}
+    3. For each view:
+    - Document specific observations
+    - Note both strengths and weaknesses
+    - Consider relationships between different views
+        - Detect artifacts, distortions, or deviations from expected appearance.
 
-Begin your detailed evaluation now.                    
+    # Human vs Model Evaluation Alignment
+    - Understand that model-generated evaluations (`model_evaluations`) may have systematic biases compared to human expert annotations (`human_annotation_ground_truth`).
+    - Human annotations reflect nuanced perceptual judgments, contextual understanding, and tolerance to minor imperfections.
+    - Model evaluations may over-penalize or under-penalize certain artifacts due to reliance on automated metrics.
+    - Adjust your scoring logic to bridge this gap by:
+    - Emphasizing perceptual quality and semantic correctness over purely numerical discrepancies.
+    - Incorporating tolerance for minor boundary or texture variations that humans typically overlook.
+    - Highlighting critical flaws that humans would consider significant, even if metrics show small deviations.
+    - Your goal is to produce evaluation scores that better correlate with human ground truth, improving reliability for downstream model ranking and selection.
+
+    {self.example_prompt}
+
+    # Response Rules
+    - Always provide detailed reasoning before scoring
+    - Support each score with specific evidence
+    - Be consistent in applying scoring criteria
+    - Maintain professional and objective tone
+    - Challenge your own assumptions
+    - Verify assessments before finalizing
+
+    Remember: Your evaluation must be thorough, evidence-based, and maintain the highest standards of accuracy.                   
 """
-
-                content = [
-                            {
-                                "type": "video_url",
-                                "video_url": {
-                                    "url": f"data:video/mp4;base64,{base64_video}"
-                                }
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/png;base64,{base64_image}"
-                                }
-                            },
-                            {
-                                "type": "text",
-                                "text": evaluation_prompt
-                            }
-                        ] if not prompt_text else [
-                            {
-                                "type": "video_url",
-                                "video_url": {
-                                    "url": f"data:video/mp4;base64,{base64_video}"
-                                }
-                            },
-                            {
-                                "type": "text",
-                                "text": evaluation_prompt
-                            }
-                        ]
-                
-                response = self.client.chat.completions.create(
-                    model=self.model_name,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": system_prompt
-                        },
-                        {
-                            "role": "user",
-                            "content": content
-                        }
-                    ],
-                    temperature=temperature,
-                    top_p=top_p
+                video = types.Part.from_bytes(
+                    data=base64_video,
+                    mime_type="video/mp4",
                 )
-
-                print(f"\nModel {self.model_name} response:")
-                print(response.choices[0].message.content)
-                result = self._parse_response(response)
+                model = self.model_name
+                evaluation_prompt = types.Part.from_text(text=evaluation_prompt)
+                contents = [
+                    types.Content(
+                    role="user",
+                    parts=[
+                        evaluation_prompt,
+                        video
+                    ]
+                    )
+                ]
+                generate_content_config = types.GenerateContentConfig(
+                temperature = 1.5,
+                top_p = 0.95,
+                seed = 0,
+                response_modalities = ["TEXT"],
+                safety_settings = [types.SafetySetting(
+                category="HARM_CATEGORY_HATE_SPEECH",
+                threshold="OFF"
+                ),types.SafetySetting(
+                category="HARM_CATEGORY_DANGEROUS_CONTENT",
+                threshold="OFF"
+                ),types.SafetySetting(
+                category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                threshold="OFF"
+                ),types.SafetySetting(
+                category="HARM_CATEGORY_HARASSMENT",
+                threshold="OFF"
+                )],
+                system_instruction=[types.Part.from_text(text=system_prompt)],
+            )
+                
+                response =  self.client.models.generate_content(
+                model = model,
+                contents = contents,
+                config = generate_content_config,)
+                initial_scores, initial_explanations = self._parse_response(response)
                 end_time = time.time()
                 evaluation_time = end_time - start_time
-                print(f"Model {self.model_name} video evaluation completed in {evaluation_time:.2f} seconds.")
-                return result[0], result[1], evaluation_time
-
+                print(f"Model {self.model_name} evaluation completed in {evaluation_time:.2f} seconds.")
+                return initial_scores, initial_explanations, evaluation_time
+            
             except Exception as e:
+                retry_count += 1
                 print(f"Error in {self.model_name} evaluation (attempt {retry_count}/{max_retries}): {e}")
                 print(f"Full error details: {str(e)}")
-                random_model = ['gemini-2.0-flash','gemini-2.5-pro-exp-03-25','gemini-2.0-pro'][retry_count % 3]
-                retry_count += 1
-                self.model_name = random_model
-                print (f"Switching to {self.model_name} for retry {retry_count}/{max_retries}...")
                 
                 if retry_count < max_retries:
                     print(f"Retrying... ({retry_count}/{max_retries})")
-                    time.sleep(2)
+                    time.sleep(2)  # Add a small delay between retries
                     continue
                 else:
                     print(f"Max retries ({max_retries}) reached. Giving up.")
-                    return None, None, 0
+                    return None, None, 0 
 
     def evaluate_image(self, image_path, prompt_text=''):
         max_retries = 3
@@ -305,7 +322,8 @@ Begin your detailed evaluation now.
     - Challenge your own assumptions
     - Verify assessments before finalizing
 
-    Remember: Your evaluation must be thorough, evidence-based, and maintain the highest standards of accuracy."""
+    Remember: Your evaluation must be thorough, evidence-based, and maintain the highest standards of accuracy.
+"""
                 evaluation_prompt = self.get_evaluation_prompt(additional_prompt=additional_prompt)
                 
                 response = self.client.chat.completions.create(
@@ -498,14 +516,38 @@ X) Dimension (0-4):
       - List key observations
       - Note potential issues
       - Identify strengths
-   
-   b) Self-Verification:
+
+   b) Step-by-step Scoring:
+    step 1. **Compare against the 4-point criteria** 
+    Check if the 3D model meets the 4-point standard.  
+        - If it does, assign a score of 4 and stop.  
+        - If not, proceed to step 2.
+
+    step 2. **Compare against the 3-point criteria**  
+    Check if the 3D model meets the 3-point standard.  
+        - If it does, assign a score of 3 and stop.  
+        - If not, proceed to step 3.
+
+    step 3. **Compare against the 2-point criteria**  
+    Check if the 3D model meets the 2-point standard.  
+        - If it does, assign a score of 2 and stop.  
+        - If not, proceed to step 4.
+
+    step 4. **Compare against the 1-point criteria**  
+    Check if the 3D model meets the 1-point standard.  
+        - If it does, assign a score of 1 and stop.  
+        - If not, proceed to step 5.
+
+    step 5. **Assign 0 points**  
+    If the 3D model does not meet any of the above criteria, assign a score of 0. 
+      
+   c) Self-Verification:
       - Have I considered all angles?
       - What evidence supports my score?
       - What might challenge my assessment?
       - Are there edge cases I missed?
    
-   c) Final Score Determination:
+   d) Final Score Determination:
       [Review criteria and justify score with specific evidence]
 
 ## Final Reflection
@@ -528,14 +570,15 @@ IMPORTANT:
 - No additional text before or after JSON
 
 Please note that EVERY VIEW should be evaluated and the score should be deducted if ANY VIEW shows defects.
-For lighting views, please note that ONLY HIGH QUALITY TEXTURES deserve score of 3 and above.
-Please be more strict and give more low scores like 1 or 0.
+Please note that ONLY HIGH QUALITY TEXTURES deserve score of 3 and above.
+Please avoid middle scores unless justified.
+
    """
         return prompt
 
     def _parse_response(self, response):
         try:
-            content = response.choices[0].message.content
+            content = response.text if 'gemini' in self.model_name else response.choices[0].message.content
             
             if "```json" in content:
                 content = content.split("```json")[1]
@@ -670,8 +713,9 @@ Please be more strict and give more low scores like 1 or 0.
 class MultiModelEvaluator:
     def __init__(self, api_key, models=None):
         if models is None:
-            models = ["gpt-4o","claude-3-7-sonnet-latest", "gemini-2.0-pro"]#,"grok-3"]["gemini-2.0-flash"]#
-        
+            self.models = ["gpt-4o","claude-3-7-sonnet-latest", "gemini-2.0-pro"]#,"grok-3"]["gemini-2.0-flash"]#
+        else:
+            self.models = models
         self.evaluators = {
             model: ModelEvaluator(model, api_key)
             for model in models
@@ -692,10 +736,8 @@ class MultiModelEvaluator:
                 if not is_gemini:
                     future = executor.submit(evaluator.evaluate_image, image_path, prompt_text)
                 else:
-                    video_path = image_path.replace('.png', '.mp4').replace('concat', 'videos')
-                    num = image_path.split('/')[-1].split('.')[0].split('_')[0]
-                    ref_img_path = f"/tos-bjml-mllm/chuziyang/eval3d/prompts/rgba510/{num}.png"
-                    future = executor.submit(evaluator.evaluate_video, ref_img_path, video_path, prompt_text)
+                    video_path = image_path.replace('.png', '.mp4').replace('concat', 'temp')
+                    future = executor.submit(evaluator.evaluate_video, video_path, prompt_text)
                 futures[model_name] = future
 
             for model_name, future in futures.items():
@@ -748,8 +790,8 @@ class MultiModelEvaluator:
                     confidence_matrix[dim, i] = np.mean(dim_confidences)
         
         final_scores = []
-        source_models = []  # 记录每个维度的分数来自哪个模型
-        confidence_scores = []  # 记录每个维度的置信度
+        source_models = []
+        confidence_scores = []
         
         for dim in range(4):
             best_model_idx = np.argmax(confidence_matrix[dim])
@@ -857,8 +899,9 @@ def process_image(evaluator, image_file, output_dir, is_text_based=False, debug=
                 "model_time": model_times[model_name],
             }
             
-            with open(model_json_path, 'a') as f:
-                json.dump(model_data, f, indent=4, ensure_ascii=False)
+            temp = [] if not os.path.exists(model_json_path) else json.load(open(model_json_path))
+            with open(model_json_path, 'w') as f:
+                json.dump(temp+[model_data], f, indent=4, ensure_ascii=False)
             print(f"Saved {model_name} evaluation to: {model_json_path}")
 
         avg_score = sum(final_scores) / len(final_scores)
@@ -911,17 +954,12 @@ def process_image(evaluator, image_file, output_dir, is_text_based=False, debug=
             "model_evaluations": evaluations,
             "model_reviews": reviews,
             "model_confidences": model_confidences,
-            "model_time": model_times[model_name]
         }
+
+        temp = [] if not os.path.exists(output_file) else json.load(open(output_file))
+        with open(output_file, 'w') as f:
+            json.dump(temp+[result], f, indent=4)
         
-        with open(output_file, 'a') as f:
-            json.dump(result, f, indent=4)
-        
-        print(f"\nFinal scores for {image_file}:")
-        for i, dim in enumerate(dimension_names):
-            print(f"{dim}: {final_scores[i]:.2f} (from {source_models[i]}, confidence: {confidence_scores[i]:.2f}%)")
-        print(f"Average Score: {avg_score:.2f}")
-        print(f"Average Confidence: {avg_confidence:.2f}%")
         summary_file = os.path.join(output_dir, "final_scores_summary.csv")
         with open(summary_file, 'a', newline='') as f:
             writer = csv.writer(f)
@@ -976,29 +1014,32 @@ def process_image(evaluator, image_file, output_dir, is_text_based=False, debug=
             "error": str(e)
         }
 
-def main(args):
-    api_key = "sk-c7nmz7iOglUKwHWxSbSXLThqtZ5VnBPEUYH6xaQgshXvTB3t"
+def main(test=True):
+    api_key = "sk-AMxT4mbIT4ofBJHyS5Ucp15OuHzDEZRLQgPLxqzwLZANZqKL"
     models = [
-        "gpt-4o",
+        # "gpt-4.1",
+        # 'o3-mini',
+        # 'o4-mini',
         # "claude-3-7-sonnet-20250219",
-        "gemini-2.0-flash",
+        "gemini-2.5-flash-preview-04-17",
         # "grok-3",
     ]
     evaluator = MultiModelEvaluator(api_key=api_key, models=models)
 
     data_path = './output/concat'
-    output_dir = './output/scores'
+    output_dir = './output/scores_test' if test else './output/scores'
     os.makedirs(output_dir, exist_ok=True)
-    methods = [m for m in os.listdir(data_path) if os.path.isdir(os.path.join(data_path,m))]  
-
-    import csv
-    methods, indexs = [], []
-    with open('.csv') as f:
-        reader = csv.reader(f)
-        for row in reader:
-            if len(row[1]) < 5:
-                methods.append(row[0])
-                indexs.append(row[1])
+    if test:
+        methods, indexs = [], []
+        with open('.csv') as f:
+            reader = csv.reader(f)
+            for row in reader:
+                if len(row[1]) < 5:
+                    methods.append(row[0])
+                    indexs.append(row[1])
+    else:
+        methods = [m for m in os.listdir(data_path) if os.path.isdir(os.path.join(data_path, m))]
+        indexs = [None]*len(methods)
 
     for method, index in zip(methods, indexs):
         print(f'Processing {method}...')
@@ -1034,9 +1075,10 @@ def main(args):
         else:
             gen_type = 'text2shape'
 
-        image_files = [os.path.join(os.path.abspath(concat_dir), f) for f in os.listdir(concat_dir)]
-
-        image_files = [os.path.join(concat_dir,f'{index}.png')]#[random.choice(image_files)]
+        if test:
+            image_files = [os.path.join(concat_dir, f'{index}.png')]
+        else:
+            image_files = [os.path.join(os.path.abspath(concat_dir), f) for f in os.listdir(concat_dir)]
 
         results = []
         if gen_type == 'text2shape':
@@ -1059,14 +1101,15 @@ def main(args):
                     print(f"Error processing {image_file}: {e}")
         
         print(f"\nProcessing complete. Results saved to {output_dir}")
+        # break
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--method')
+    parser.add_argument('--test',action='store_true')
     args = parser.parse_args()
 
     print(f"OpenAI version: {openai.__version__}")
     start_time = time.time()
-    main(args) 
+    main(test=args.test) 
     end_time = time.time()
     print(f"Total time taken: {end_time - start_time} seconds")
