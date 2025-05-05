@@ -140,7 +140,7 @@ Remember: Your objective is to align with human scoring standards and emulate hu
                 base64_video = open(video_path, 'rb').read()
 
                 additional_prompt = f'The video shows multiple views of a 3D model generated from the text prompt: "{prompt_text}".' if prompt_text else 'The video shows multiple views of a 3D model generated from the reference image.'
-                evaluation_prompt = self.get_evaluation_prompt(additional_prompt=additional_prompt)
+                evaluation_prompt = self.get_evaluation_prompt(additional_prompt=additional_prompt, video=True)
 
                 info = f'text prompt: "{prompt_text}"' if prompt_text else 'reference image'
                 ref_image_prompt = "2.0 Left most column: reference image" if not prompt_text else ""
@@ -324,7 +324,7 @@ Remember: Your objective is to align with human scoring standards and emulate hu
 
     Remember: Your evaluation must be thorough, evidence-based, and maintain the highest standards of accuracy.
 """
-                evaluation_prompt = self.get_evaluation_prompt(additional_prompt=additional_prompt)
+                evaluation_prompt = self.get_evaluation_prompt(additional_prompt=additional_prompt, video=False)
                 
                 response = self.client.chat.completions.create(
                     model=self.model_name,
@@ -374,7 +374,7 @@ Remember: Your objective is to align with human scoring standards and emulate hu
                     print(f"Max retries ({max_retries}) reached. Giving up.")
                     return None, None, 0
 
-    def get_evaluation_prompt(self, additional_prompt=''):
+    def get_evaluation_prompt(self, additional_prompt='', video=False):
         json_format = r"""{
         "analysis": {
             "geometry_view": {
@@ -442,7 +442,205 @@ Remember: Your objective is to align with human scoring standards and emulate hu
             "confidence_level": "string"
         }
     }"""
-        prompt = f"""# Role and Instructions
+        if video:
+            return f"""# Role and Instructions
+You are an expert 3D model evaluation system. You must provide your analysis and scores in a strict JSON format.
+
+{additional_prompt}
+
+# Standard of Evaluation
+You should evaluate the 3D model based on the following criteria:
+
+1) Detail & Complexity (0-4): This criterion assesses the richness of the texture in terms of its visual details and complexity while maintaining a harmonious balance to prevent overly fancy patterns that may compromise aesthetics. Judgements should primarily focus on *Level of Detail* (Does the texture offer enough fine details that could enhance realism, or is it too simplistic?) and *Balance of Simplicity and Complexity* (Is there a good balance between intricate details and simple areas, avoiding visual overload?)
+Please use Geometry View and RGB View (*ignore geometry defects, focus on details*)  
+- 0: No clear features of textures, no observable detail resolution
+- 1: Very simplistic or overly detailed, with subtle patterns or excessive ornamentation
+- 2: Poor balance between simplicity and intricacy, like inbalance between different surfaces or regions, or imperfect quality or in improper positions
+- 3: Moderate details with only little defects that slightly affect the overall impressions
+- 4: Suitable details with an optimal visual balance, without any visible defects
+- Step-by-step Scoring:
+    step 1. **Compare against the 4-point criteria** 
+    Check if the 3D model meets the 4-point standard.  
+        - If it does, assign a score of 4 and stop.  
+        - If not, proceed to step 2.
+
+    step 2. **Compare against the 3-point criteria**  
+    Check if the 3D model meets the 3-point standard.  
+        - If it does, assign a score of 3 and stop.  
+        - If not, proceed to step 3.
+
+    step 3. **Compare against the 2-point criteria**  
+    Check if the 3D model meets the 2-point standard.  
+        - If it does, assign a score of 2 and stop.  
+        - If not, proceed to step 4.
+
+    step 4. **Compare against the 1-point criteria**  
+    Check if the 3D model meets the 1-point standard.  
+        - If it does, assign a score of 1 and stop.  
+        - If not, proceed to step 5.
+
+    step 5. **Assign 0 points**  
+    If the 3D model does not meet any of the above criteria, assign a score of 0. 
+
+2) Colorfulness & Saturation (0-4): This evaluates the overall color distribution across the texture and its visual clarity at a glance. Judgements should primarily focus on *Color Diversity* (Are there proper color variations to distinguish features or does the texture look too monotone?), *Saturation* (Are the colors appropriately saturated, neither too muted nor too vibrant?) and *Color Suitability* (Does the hue logically match the reality well and improve its visual effects?)
+Please use Geometry View and RGB View (*ignore geometry defects, focus on colors*)  
+- 0: No clear features of textures, no discernible color features
+- 1: Extremely saturated or colorful, or with an irregular color distribution, which confounds the perceptual clarity
+- 2: Incorrect saturation or lack of color diversity, like a monochromatic appearance that does not suit the object
+- 3: Suitable saturation with only little color defects, like only little colors that mismatch the reality
+- 4: Excellent colorfulness and easy to interpret, without noticeable color faults  
+- Step-by-step Scoring:
+    step 1. **Compare against the 4-point criteria** 
+    Check if the 3D model meets the 4-point standard.  
+        - If it does, assign a score of 4 and stop.  
+        - If not, proceed to step 2.
+
+    step 2. **Compare against the 3-point criteria**  
+    Check if the 3D model meets the 3-point standard.  
+        - If it does, assign a score of 3 and stop.  
+        - If not, proceed to step 3.
+
+    step 3. **Compare against the 2-point criteria**  
+    Check if the 3D model meets the 2-point standard.  
+        - If it does, assign a score of 2 and stop.  
+        - If not, proceed to step 4.
+
+    step 4. **Compare against the 1-point criteria**  
+    Check if the 3D model meets the 1-point standard.  
+        - If it does, assign a score of 1 and stop.  
+        - If not, proceed to step 5.
+
+    step 5. **Assign 0 points**  
+    If the 3D model does not meet any of the above criteria, assign a score of 0. 
+
+3) Consistency & Artifact (0-4): This criterion evaluates whether the texture remains uniform and cohesive under different lighting conditions (e.g., indoor / outdoor). Judgements should primarily focus on whether there are *Noticeable Seams or Borders* (specifically whether abrupt changes in shading that break the texture's flow under varying lighting conditions) and *Shading Artifacts* (Are there unnatural lighting streaks or shadows on the surface when illuminated? Are there unreasonable specular highlights appearing when the surface is in dark?)
+Please use all Lighting Views
+- 0: No clear features of textures under varying illumination conditions
+- 1: Large-scale discontinuity such as large area of luminance differences / incorrect highlights / black shadows
+- 2: Clear inconsistencies or artifacts in multi-views, such as abrupt brightness changes
+- 3: Only little inconsistencies or shading artifacts which are very imperceptible
+- 4: Perfectly consistent and seamless without shading artifacts
+- Step-by-step Scoring:
+    step 1. **Compare against the 4-point criteria** 
+    Check if the 3D model meets the 4-point standard.  
+        - If it does, assign a score of 4 and stop.  
+        - If not, proceed to step 2.
+
+    step 2. **Compare against the 3-point criteria**  
+    Check if the 3D model meets the 3-point standard.  
+        - If it does, assign a score of 3 and stop.  
+        - If not, proceed to step 3.
+
+    step 3. **Compare against the 2-point criteria**  
+    Check if the 3D model meets the 2-point standard.  
+        - If it does, assign a score of 2 and stop.  
+        - If not, proceed to step 4.
+
+    step 4. **Compare against the 1-point criteria**  
+    Check if the 3D model meets the 1-point standard.  
+        - If it does, assign a score of 1 and stop.  
+        - If not, proceed to step 5.
+
+    step 5. **Assign 0 points**  
+    If the 3D model does not meet any of the above criteria, assign a score of 0. 
+
+4) Material Plausibility (0-4): This evaluates whether the texture exhibits plausible diffuse and specular lighting effects that align with the real-world material behaviors as specified in the prompt. Judgements should primarily focus on *Metalness* (Does the texture display physically suitable specular lighting effects under natural lighting condition?) and *Roughness* (Does it correctly represent diffuse lighting effects?)
+Please use indoor and outdoor Lighting Views
+- 0: No clear features of textures, no discernible structural features
+- 1: Poor reflection behaviors or extreme exposure due to both incorrect metalness and roughness
+- 2: Incorrect metallic or roughness settings, or unsuitable exposure that reduces visual effects
+- 3: Only little difference from material specification in prompt
+- 4: Excellent light reflection with plausible exposure and aligns well with reality
+- Step-by-step Scoring:
+    step 1. **Compare against the 4-point criteria** 
+    Check if the 3D model meets the 4-point standard.  
+        - If it does, assign a score of 4 and stop.  
+        - If not, proceed to step 2.
+
+    step 2. **Compare against the 3-point criteria**  
+    Check if the 3D model meets the 3-point standard.  
+        - If it does, assign a score of 3 and stop.  
+        - If not, proceed to step 3.
+
+    step 3. **Compare against the 2-point criteria**  
+    Check if the 3D model meets the 2-point standard.  
+        - If it does, assign a score of 2 and stop.  
+        - If not, proceed to step 4.
+
+    step 4. **Compare against the 1-point criteria**  
+    Check if the 3D model meets the 1-point standard.  
+        - If it does, assign a score of 1 and stop.  
+        - If not, proceed to step 5.
+
+    step 5. **Assign 0 points**  
+    If the 3D model does not meet any of the above criteria, assign a score of 0. 
+
+# Evaluation Process
+1. Analyze each view type systematically
+2. Document specific observations
+3. Verify assessments
+4. Provide final scores with evidence
+
+## Initial Analysis Phase
+First, let's examine each view type carefully and document our observations:
+
+1. Geometry View Analysis:
+   - What is the object like?
+   - What should the material be based on the geometry and reference prompt?
+   - Document specific examples
+
+2. RGB View Analysis:
+   - How clear and consistent are the textures?
+   - What is the quality of color and detail?
+   - Are there any visual artifacts?
+   - Document specific observations
+
+3. Light View Analysis:
+   - What is the lighting effect under each condition?
+   - What is the quality of reflection effects of the material?
+   - Does the lighting reflections align well with reality?
+   - Document specific observations
+
+## Verification Phase
+For each dimension, let's verify our initial assessment:
+
+X) Dimension (0-4):
+   a) Initial Assessment:
+      - List key observations
+      - Note potential issues
+      - Identify strengths
+      
+   b) Self-Verification:
+      - Have I considered all angles?
+      - What evidence supports my score?
+      - What might challenge my assessment?
+      - Are there edge cases I missed?
+   
+   c) Final Score Determination:
+      [Review criteria and justify score with specific evidence]
+
+## Final Reflection
+Before submitting scores:
+1. Review all assessments for consistency
+2. Verify evidence supports each score
+3. Challenge any potential biases
+4. Consider edge cases and limitations
+5. Confirm alignment with scoring criteria
+
+# Required Output Format
+You must return a single JSON object with the following structure:
+
+{json_format}
+
+IMPORTANT: 
+- Return ONLY valid JSON
+- Include ALL fields
+- Use proper JSON syntax
+- No additional text before or after JSON
+
+"""
+        else:
+            return f"""# Role and Instructions
 You are an expert 3D model evaluation system. You must provide your analysis and scores in a strict JSON format.
 
 {additional_prompt}
@@ -573,8 +771,7 @@ Please note that EVERY VIEW should be evaluated and the score should be deducted
 Please note that ONLY HIGH QUALITY TEXTURES deserve score of 3 and above.
 Please avoid middle scores unless justified.
 
-   """
-        return prompt
+"""
 
     def _parse_response(self, response):
         try:
@@ -736,7 +933,7 @@ class MultiModelEvaluator:
                 if not is_gemini:
                     future = executor.submit(evaluator.evaluate_image, image_path, prompt_text)
                 else:
-                    video_path = image_path.replace('.png', '.mp4').replace('concat', 'temp')
+                    video_path = image_path.replace('.png', '.mp4').replace('concat', 'videos')
                     future = executor.submit(evaluator.evaluate_video, video_path, prompt_text)
                 futures[model_name] = future
 
@@ -1087,10 +1284,11 @@ def main(test=True):
             is_text_based = False
       
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_image = {
-                executor.submit(process_image, evaluator, image_file, output_dir, is_text_based): image_file
-                for image_file in image_files
-            }
+            future_to_image = {}
+            for image_file in image_files:
+                future = executor.submit(process_image, evaluator, image_file, output_dir, is_text_based)
+                future_to_image[future] = image_file
+                time.sleep(1)
             
             for future in tqdm(concurrent.futures.as_completed(future_to_image), total=len(image_files)):
                 image_file = future_to_image[future]
