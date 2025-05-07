@@ -125,6 +125,7 @@ class InternVideo2_CLIP(nn.Module):
     def generate(self, image, text, idx, prompt, is_text_prompt):
 
         B, device = image.shape[0], image.device
+        image = image.flatten(0, 1)
 
         self.clip_contrastive_temperature()
         vision_embeds = self.encode_vision(image)
@@ -139,7 +140,30 @@ class InternVideo2_CLIP(nn.Module):
         if image_prompts:
             prompt_embeds[is_image_prompt] = self.encode_image(image_prompts).to(device)
 
-        return get_sim(vision_embeds, prompt_embeds, self.temp)
+        output = self.qformer(
+                vision_embeds.reshape(B, -1, vision_embeds.shape[-1]),
+                prompt_embeds.unsqueeze(dim=1),
+            )
+        return output
+
+    def sim(self, image, text, idx, prompt, is_text_prompt):
+        
+        B, device = image.shape[0], image.device
+
+        self.clip_contrastive_temperature()
+        vision_embeds = self.encode_vision(image)
+        
+        prompt_embeds = torch.zeros([B,vision_embeds.shape[-1]], dtype=vision_embeds.dtype).to(device)
+        text_prompts = [p for p, v in zip(prompt, is_text_prompt) if v]
+        image_prompts = [p for p, v in zip(prompt, is_text_prompt) if not v]
+        is_image_prompt = torch.where(~is_text_prompt)
+        is_text_prompt = torch.where(is_text_prompt)
+        if text_prompts:
+            prompt_embeds[is_text_prompt] = self.encode_text(self.tokenizer(text_prompts).to(device))
+        if image_prompts:
+            prompt_embeds[is_image_prompt] = self.encode_image(image_prompts).to(device)
+
+        return get_sim(vision_embeds, vision_embeds, self.temp)
 
     def encode_vision(self, image):
         """encode image / videos as features.
