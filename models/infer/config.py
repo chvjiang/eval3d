@@ -1,15 +1,14 @@
 # ========================= data ==========================
 available_corpus = dict(
     infer = dict(
-        anno_path="/fs-computility/mllm/chuziyang/eval3d/data/infer.json", 
+        # anno_path="/fs-computility/mllm/chuziyang/eval3d/data/stage2_test.json", 
+        anno_path="/fs-computility/mllm/chuziyang/eval3d/.json", 
         data_root="/fs-computility/mllm/chuziyang/eval3d/data",
         media_type="video",
     ),
 )
 train_stage = None
-train_file = available_corpus[f"infer"]
-test_file = dict(act_val=available_corpus[f"infer"])
-test_types = ["val"]
+test_file = available_corpus[f"infer"]
 num_workers = 0
 
 stop_key = None
@@ -41,7 +40,8 @@ model = dict(
     vision_encoder=dict(
         name="InternViT",
         config="/fs-computility/mllm/chuziyang/eval3d/configs/encoder",
-        ckpt="/fs-computility/mllm/chuziyang/eval3d/models/temp/stage1/ckpt_01.pth/mp_rank_00_model_states.pt",
+        ckpt="/fs-computility/mllm/chuziyang/eval3d/ckpts/vision_model.safetensors"
+        # ckpt="/fs-computility/mllm/chuziyang/eval3d/models/temp/stage1_new/ckpt_00.pth/mp_rank_00_model_states.pt",
     ),
     clip_encoder=dict(
         name='ViT-H-14',
@@ -49,7 +49,7 @@ model = dict(
     ),
     qformer=dict(
         config="/fs-computility/mllm/chuziyang/eval3d/configs/qformer",
-        ckpt="/fs-computility/mllm/chuziyang/eval3d/ckpts/qformer.safetensors"
+        ckpt="/fs-computility/mllm/chuziyang/eval3d/models/temp/query128/ckpt_01.pth/mp_rank_00_model_states.pt"
     ),
     tokenizer='ViT-H-14',
     temp=1 / 100.0,
