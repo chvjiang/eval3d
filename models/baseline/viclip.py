@@ -27,7 +27,7 @@ def frames2tensor(vid_list, fnum=8, target_size=(224, 224)):
     vid_tube = torch.from_numpy(vid_tube).float()
     return vid_tube
 
-def viclip_image_score(video, image, model):
+def viclip_image_score(video, image, model, device='cuda'):
     assert isinstance(image, str), "Only 1 text is supported for reference" 
     model.eval()
     video = cv2.VideoCapture(video)
@@ -35,19 +35,19 @@ def viclip_image_score(video, image, model):
     frames_tensor = frames2tensor(frames)
     image_tensor = frames2tensor([cv2.imread(image)], fnum=1)
     with torch.no_grad():
-        video_feat = model.get_vid_features(frames_tensor)
-        image_feat = model.get_vid_features(image_tensor)
+        video_feat = model.get_vid_features(frames_tensor.to(device))
+        image_feat = model.get_vid_features(image_tensor.to(device))
         score = video_feat @ image_feat.T
     return score
 
-def viclip_text_score(video, text, model):
+def viclip_text_score(video, text, model, device='cuda'):
     assert isinstance(text, str), "Only 1 text is supported for reference" 
     model.eval()
     video = cv2.VideoCapture(video)
     frames = [x for x in _frame_from_video(video)]
     frames_tensor = frames2tensor(frames)
     with torch.no_grad():
-        video_feat = model.get_vid_features(frames_tensor)
+        video_feat = model.get_vid_features(frames_tensor.to(device))
         text_feat = model.get_text_features(text)
         score = video_feat @ text_feat.T
     return score
