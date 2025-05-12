@@ -8,11 +8,11 @@ export PYTHONPATH=${PYTHONPATH}:.
 echo "PYTHONPATH: ${PYTHONPATH}"
 
 NNODE=1
-NUM_GPUS=8
-NUM_CPU=8
+NUM_GPUS=$(nvidia-smi --list-gpus | wc -l)
 
 torchrun --nnodes=${NNODE} \
---nproc_per_node=${NUM_GPUS} \
---rdzv_backend=c10d \
-$(dirname $0)/pretrain.py \
-$(dirname $0)/config.py
+    --nproc_per_node=${NUM_GPUS} \
+    --rdzv_backend=c10d \
+    --rdzv_endpoint=127.0.0.1:${MASTER_PORT} \
+    $(dirname $0)/pretrain.py \
+    $(dirname $0)/config.py

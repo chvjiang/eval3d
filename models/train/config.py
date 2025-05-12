@@ -1,20 +1,25 @@
 # ========================= data ==========================
 available_corpus = dict(
     stage1 = dict(
-        anno_path="/fs-computility/mllm/chuziyang/eval3d/data/train_stage1.json", 
+        anno_path="/fs-computility/mllm/chuziyang/eval3d/data/stage1_full.json", 
         data_root="/fs-computility/mllm/chuziyang/eval3d/data",
         media_type="video",
     ),
     stage2 = dict(
-        anno_path="/fs-computility/mllm/chuziyang/eval3d/data/train_stage2.json", 
+        anno_path="/fs-computility/mllm/chuziyang/eval3d/data/stage2_train.json", 
+        data_root="/fs-computility/mllm/chuziyang/eval3d/data",
+        media_type="video",
+    ),
+    test = dict(
+        anno_path="/fs-computility/mllm/chuziyang/eval3d/data/stage2_test.json", 
         data_root="/fs-computility/mllm/chuziyang/eval3d/data",
         media_type="video",
     )
 )
-train_stage=2
+train_stage=1
 train_file = available_corpus[f"stage{train_stage}"]
-test_file = dict(act_val=available_corpus[f"stage{train_stage}"])
-test_types = ["val"]
+test_file = available_corpus[f"test"]
+test=False
 num_workers = 0
 
 stop_key = None
@@ -22,8 +27,8 @@ stop_key = None
 # ========================= input ==========================
 num_frames = 16
 num_frames_test = 16
-batch_size = 8
-batch_size_test = 8
+batch_size = 6
+batch_size_test = 6
 max_txt_l = 32
 
 inputs = dict(
@@ -46,8 +51,8 @@ model = dict(
     vision_encoder=dict(
         name="InternViT",
         config="/fs-computility/mllm/chuziyang/eval3d/configs/encoder",
-        # ckpt="/fs-computility/mllm/chuziyang/eval3d/ckpts/vision_model.safetensors"
-        ckpt="/fs-computility/mllm/chuziyang/eval3d/models/temp/stage1/ckpt_01.pth/mp_rank_00_model_states.pt",
+        ckpt="/fs-computility/mllm/chuziyang/eval3d/ckpts/vision_model.safetensors"
+        # ckpt="/fs-computility/mllm/chuziyang/eval3d/models/temp/stage1_new/ckpt_00.pth/mp_rank_00_model_states.pt",
     ),
     clip_encoder=dict(
         name='ViT-H-14',
@@ -81,7 +86,7 @@ optimizer = dict(
     different_lr=dict(enable=False, module_names=[], lr=1e-3),
 )
 
-scheduler = dict(sched="cosine", epochs=2, min_lr_multi=0.01, warmup_epochs=0.6)
+scheduler = dict(sched="cosine", epochs=1, min_lr_multi=0.01, warmup_epochs=0.6)
 
 evaluate = False
 deep_fusion = False
@@ -107,7 +112,7 @@ device = "cuda"
 mode = "pt"
 
 # ========================= others ==========================
-output_dir = "temp/test"  # output dir
+output_dir = "temp/s1"  # output dir
 resume = False  # if True, load optimizer and scheduler states as well
 debug = False
 log_freq = 1
@@ -115,7 +120,7 @@ seed = 42
 
 save_latest = False
 save_iter = 500
-auto_resume = True
+auto_resume = False
 pretrained_path = ""  # path to pretrained model weights, for resume only?
 
 deepspeed = dict(

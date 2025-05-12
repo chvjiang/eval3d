@@ -2,7 +2,7 @@ import datetime
 import logging
 import time
 from os.path import join
-
+import json
 import pandas as pd
 import torch
 import torch.backends.cudnn as cudnn
@@ -11,7 +11,7 @@ import wandb
 from torch.utils.data import ConcatDataset
 
 from dataset.serialize import local_broadcast_process_authkey
-from dataset import MetaLoader_rs, create_dataset, create_loader, create_sampler, create_stateful_sampler
+from dataset import MetaLoader_rs, MetaLoader, create_dataset, create_loader, create_sampler, create_stateful_sampler
 from models import *
 from utils.retrieval_utils import evaluation_wrapper
 from utils.shared_utils import get_media_types, setup_model
@@ -145,6 +145,43 @@ def train(
     return global_step
 
 
+def infer(model, test_loaders, tokenizer, device, config, data_type):
+    metrics = ['Detail','Color','Light','Material']
+    eval_res = {k:[] for k in metrics}
+    
+    media_types = get_media_types(test_loaders)
+    test_loader = MetaLoader(name2loader=dict(list(zip(media_types, test_loaders))))
+
+    metric_logger = MetricLogger(delimiter="  ")
+    for metric in metrics:
+        metric_logger.add_meter(metric, SmoothedValue(window=1, fmt="{value:1.1f}"))
+    header = f"Test MAE: "
+    iterator = metric_logger.log_every(test_loader, config.log_freq, header)
+    
+    start_time = time.time()
+
+    with torch.no_grad():
+        with torch.cuda.amp.autocast(enabled=config.use_half_precision, dtype=data_type):
+            for _, (_, (image, text, idx, prompt, is_text_prompt, score)) in enumerate(iterator):
+                image = image.to(device, non_blocking=True)
+                idx = idx.to(device, non_blocking=True)
+                text_input = tokenizer(text).to(device)
+
+                predicts = model.generate(image, text_input, idx=idx, prompt=prompt, is_text_prompt=is_text_prompt)
+                for i, metric in enumerate(metrics):
+                    metric_logger.update(**{f"{metric}": torch.abs(predicts[:,i]-score[:,i].to(device)).mean()})
+                    for index in range(len(idx)):
+                        eval_res[metric].append({
+                            "index": int(idx[index].detach().cpu().numpy()), 
+                            "Predict": float(predicts[index][i].detach().cpu().float().numpy()), 
+                            "GT": float(score[index][i].detach().cpu().float().numpy()),
+                        })
+    total_time = time.time() - start_time
+    total_time_str = str(datetime.timedelta(seconds=int(total_time)))
+    logger.info(f"Inference time {total_time_str}")
+    logger.info(f"Logs saved at {config.output_dir}")
+    return eval_res
+
 def setup_dataloaders(config, mode="pt"):
     # train datasets, create a list of data loaders
     logger.info(f"Creating dataset for {mode}")
@@ -165,17 +202,17 @@ def setup_dataloaders(config, mode="pt"):
         collate_fns=[None] * len(media_types),
     )
     # test datasets, a mapping from dataset name to data loader
-    test_datasets, test_dataset_names = create_dataset(f"{mode}_eval", config)
+    test_datasets = create_dataset(f"{mode}_eval", config)
+    media_types = get_media_types(test_datasets)
     test_loaders = create_loader(
         test_datasets,
         [None] * len(test_datasets),
-        batch_size=[config.inputs.batch_size_test[d.media_type] for d in test_datasets],
+        batch_size=[config.inputs.batch_size_test[d] for d in media_types],
         num_workers=[config.num_workers] * len(test_datasets),
         is_trains=[False] * len(test_datasets),
         collate_fns=[None] * len(test_datasets),
     )
-    test_name2loaders = {k: v for k, v in zip(test_dataset_names, test_loaders)}
-    return train_loaders, test_name2loaders, media_types
+    return train_loaders, test_loaders, media_types
 
 
 def main(config):
@@ -189,7 +226,7 @@ def main(config):
     setup_seed(config.seed + get_rank())
     device = torch.device(config.device)
 
-    train_loaders, test_name2loaders, train_media_types = setup_dataloaders(
+    train_loaders, test_loaders, train_media_types = setup_dataloaders(
         config, mode=config.mode
     )
     num_steps_per_epoch = sum(len(d) for d in train_loaders)
@@ -219,9 +256,6 @@ def main(config):
     )
     if is_main_process() and config.wandb.enable:
         wandb.watch(model)
-
-    best = 0
-    best_epoch = 0
 
     if config.get('use_bf16', True):
         data_type = torch.bfloat16
@@ -284,55 +318,18 @@ def main(config):
                 torch.save(save_obj, join(config.output_dir, f"ckpt_{epoch:02d}.pth"))
 
         # evaluation
-        with torch.cuda.amp.autocast(enabled=config.use_half_precision, dtype=data_type):
-            eval_res = {}
-            for test_name, test_loader in test_name2loaders.items():
-                if test_name not in config.test_types:
-                    logger.info(
-                        f"Skip eval {test_name} split. All test_types {config.test_types}"
-                    )
-                    continue
-                res = evaluation_wrapper(
-                    model_without_ddp, test_loader, tokenizer, device, config, data_type=data_type, prefix=test_name
-                )
-                eval_res.update(res)
+        eval_res = {}
+        if config.test:
+            eval_res = infer(model_without_ddp, test_loaders, tokenizer, device, config, data_type=data_type)
 
         # save the best checkpoint
         if is_main_process():
             # log to wandb
             if config.wandb.enable:
-                for p, v in eval_res.items():
-                    log_dict_to_wandb(v, step=global_step, prefix=p)
+                log_dict_to_wandb({k:str(v) for k,v in eval_res.items()}, step=global_step, prefix='test/')
 
-            if config.stop_key is not None and config.stop_key in eval_res:
-                cur_r_mean = eval_res[config.stop_key]["r_mean"]
-            else:  # None
-                cur_r_mean = best + 1  # save the last as the best
-
-            eval_res = pd.DataFrame(eval_res)
-            logger.info(f"Epoch {epoch}")
-            logger.info(f"\n{eval_res.transpose().to_string(max_cols=30)}")
-
-            eval_res.to_json(join(config.output_dir, "eval_res_latest.json"))
-
-            if not config.evaluate and cur_r_mean > best:
-                if not hasattr(config, "deepspeed") or not config.deepspeed.enable:
-                    torch.save(save_obj, join(config.output_dir, "ckpt_best.pth"))
-                eval_file = "eval_res_best.json"
-                eval_res.to_json(join(config.output_dir, eval_file))
-                best = cur_r_mean
-                best_epoch = epoch
-        
-        if hasattr(config, "deepspeed") and config.deepspeed.enable:
-            r_mean_best = torch.tensor([0.0, 0.0]).to(device)
-            if is_main_process():
-                r_mean_best[0] = cur_r_mean
-                r_mean_best[1] = best
-            dist.broadcast(r_mean_best, 0)
-            cur_r_mean, best = r_mean_best[0].item(), r_mean_best[1].item()
-        
-            if not config.evaluate and cur_r_mean > best:
-                model.save_checkpoint(config.output_dir, tag="ckpt_best.pth", save_latest=False, exclude_frozen_parameters=True)
+            with open(join(config.output_dir, "eval_res_latest.json"), 'w') as f:
+                json.dump(eval_res, f, indent=4)
 
         if config.evaluate:
             break
@@ -344,7 +341,6 @@ def main(config):
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     logger.info(f"Training time {total_time_str}")
-    logger.info(f"best epoch {best_epoch} [config.stop_key {config.stop_key}]")
     logger.info(f"Checkpoints and Logs saved at {config.output_dir}")
 
     if is_main_process() and config.wandb.enable:
