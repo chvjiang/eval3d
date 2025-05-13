@@ -38,7 +38,7 @@ def get_media_type(dataset_config):
     return dataset_config['media_type']
 
 def get_dataset_cls(dataset_type, media_type, data_cfg):
-    if dataset_type == "pt_train":
+    if dataset_type == "pt_train" or dataset_type == "pt_eval":
         if media_type == "image":
             dataset_cls = ImgTxtPtTrainDataset
         elif media_type == "video":
@@ -110,13 +110,10 @@ def get_train_transform(config, train_file):
 
     train_transform = transforms.Compose(
         [
-            aug_transform,
-            transforms.RandomResizedCrop(
-                config.inputs.image_res,
-                scale=(0.5, 1.0),
+            transforms.Resize(
+                (config.inputs.image_res, config.inputs.image_res),
                 interpolation=InterpolationMode.BICUBIC,
             ),
-            transforms.RandomHorizontalFlip(),
             type_transform,
             normalize,
         ]
@@ -246,6 +243,61 @@ def create_dataset(dataset_type, config):
 
         return train_datasets
 
+    elif dataset_type == "pt_eval":
+        # convert to list of lists
+        test_files = (
+            [config.test_file] if isinstance(config.test_file, dict) else config.test_file
+        )
+        test_media_types = sorted(list({get_media_type(e) for e in test_files}))
+
+        test_datasets = []
+        for m in test_media_types:
+            
+            # dataset of the same media_type will be mixed in a single Dataset object
+            _test_files = [e for e in test_files if get_media_type(e) == m]
+
+            datasets = []
+            sample_weights = []
+            for test_file in _test_files:
+                dataset_cls = get_dataset_cls(dataset_type=dataset_type, media_type=m, data_cfg=test_file)
+                if m == "audio":
+                    test_transform = None
+                else:
+                    test_transform = get_test_transform(config, test_file)
+                dataset_kwargs = dict(
+                    ann_file=test_file,
+                    transform=test_transform,
+                )
+
+                if m == "audio_video":
+                    dataset_kwargs.update(video_only_dataset_kwargs_train)
+                    dataset_kwargs.update(audio_only_dataset_kwargs_train)
+                elif m == "video":
+                    dataset_kwargs.update(video_only_dataset_kwargs_train)
+                elif m == 'audio':
+                    dataset_kwargs.update(audio_only_dataset_kwargs_train)
+                elif m != 'image':
+                    raise NotImplementedError(m)
+                logger.info(f"dataset_type={dataset_type}, test_file={test_file}")
+                logger.info(dataset_kwargs)
+                logger.info('test_transform:')
+                logger.info(str(test_transform))
+
+                datasets.append(dataset_cls(**dataset_kwargs))
+                sample_weights.append(test_file.get("sample_weight", 1))
+                # assert train_file.get("sample_weight", 1) == 1, train_file
+
+            if sum(sample_weights) > len(sample_weights):
+                logger.info(f'Use ResampleConcatDataset for {m}, sample_weights={sample_weights}')
+                dataset = ResampleConcatDataset(datasets, sample_weights=sample_weights)
+            else:
+                logger.info(f'Use ConcatDataset for {m}')
+                dataset = ConcatDataset(datasets)
+
+            test_datasets.append(dataset)
+
+        return test_datasets
+
     elif dataset_type == "ret_train":
         assert isinstance(config.train_file, dict), config.train_file
         train_transform = get_train_transform(config, config.train_file)
@@ -304,7 +356,7 @@ def create_dataset(dataset_type, config):
 
         return train_dataset
     
-    elif dataset_type in ["pt_eval", "ret_eval", "qa_eval"]:
+    elif dataset_type in ["ret_eval", "qa_eval"]:
         test_datasets = []
         test_dataset_names = []
         # multiple test datasets, all separate
@@ -313,7 +365,7 @@ def create_dataset(dataset_type, config):
             test_dataset_names.append(name)
             test_transform = get_test_transform(config, data_cfg)
 
-            if dataset_type == "qa_eval" or (dataset_type == "pt_eval" and "_qa_" in name):
+            if dataset_type == "qa_eval" :
                 test_dataset_cls = get_dataset_cls(dataset_type='qa_eval',
                                                    media_type=media_type,
                                                    data_cfg=data_cfg)
