@@ -163,7 +163,7 @@ class InternVideo2_CLIP(nn.Module):
         if image_prompts:
             prompt_embeds[is_image_prompt] = self.encode_image(image_prompts).to(device)
 
-        return get_sim(vision_embeds, vision_embeds, self.temp)
+        return get_sim(vision_embeds, vision_embeds.mean(dim=1), self.temp)
 
     def encode_vision(self, image):
         """encode image / videos as features.
