@@ -1,23 +1,38 @@
+import os
 # ========================= data ==========================
 available_corpus = dict(
-    infer = dict(
-        # anno_path="/fs-computility/mllm/chuziyang/eval3d/data/stage2_test.json", 
-        anno_path="/fs-computility/mllm/chuziyang/eval3d/.json", 
+    stage1 = dict(
+        anno_path="/fs-computility/mllm/chuziyang/eval3d/data/stage1.json", 
         data_root="/fs-computility/mllm/chuziyang/eval3d/data",
         media_type="video",
     ),
+    stage2 = dict(
+        anno_path="/fs-computility/mllm/chuziyang/eval3d/data/stage2_D.json", # changed
+        data_root="/fs-computility/mllm/chuziyang/eval3d/data",
+        media_type="video",
+    ),
+    test = dict(
+        anno_path="/fs-computility/mllm/chuziyang/eval3d/data/stage2_test_0.json", 
+        data_root="/fs-computility/mllm/chuziyang/eval3d/data",
+        media_type="video",
+    )
 )
-train_stage = None
-test_file = available_corpus[f"infer"]
+train_full=False
+train_stage=2
+train_file = available_corpus[f"stage{train_stage}"]
+test_file = available_corpus['test']
+test_dim = ['Detail']
 num_workers = 0
 
 stop_key = None
 
+output_dir = os.path.dirname(__file__)  # output dir
+
 # ========================= input ==========================
-num_frames = 16
-num_frames_test = 16
+num_frames = 16                  # changed
+num_frames_test = 16             # changed
 batch_size = 8
-batch_size_test = 8
+batch_size_test = 48
 max_txt_l = 32
 
 inputs = dict(
@@ -39,17 +54,19 @@ model = dict(
     model_cls="InternVideo2_CLIP",
     vision_encoder=dict(
         name="InternViT",
-        config="/fs-computility/mllm/chuziyang/eval3d/configs/encoder",
-        ckpt="/fs-computility/mllm/chuziyang/eval3d/ckpts/vision_model.safetensors"
-        # ckpt="/fs-computility/mllm/chuziyang/eval3d/models/temp/stage1_new/ckpt_00.pth/mp_rank_00_model_states.pt",
+        config="configs/encoder",
+        ckpt="/fs-computility/mllm/chuziyang/eval3d/ckpts/stage1.pt",
     ),
     clip_encoder=dict(
         name='ViT-H-14',
         ckpt="/fs-computility/mllm/shared/chuziyang/models/laion/CLIP-ViT-H-14-laion2B-s32B-b79K/open_clip_model.safetensors"
     ),
     qformer=dict(
-        config="/fs-computility/mllm/chuziyang/eval3d/configs/qformer",
-        ckpt="/fs-computility/mllm/chuziyang/eval3d/models/temp/query128/ckpt_01.pth/mp_rank_00_model_states.pt"
+        config="configs/qformer",
+        ckpt="/fs-computility/mllm/shared/chuziyang/models/eval3d/temp/sampled_Q1_L2_F16_MAE_CNN_D_dropout_full/ckpt_29.pth/mp_rank_00_model_states.pt",
+        # ckpt="/fs-computility/mllm/shared/chuziyang/models/eval3d/temp/uni_F16_MAE_CNN_C_dropout0.5_full/ckpt_29.pth/mp_rank_00_model_states.pt",
+        # ckpt="/fs-computility/mllm/shared/chuziyang/models/eval3d/temp/uni_F16_MAE_CNN_L_dropout0.5_full/ckpt_29.pth/mp_rank_00_model_states.pt",
+        # ckpt="/fs-computility/mllm/shared/chuziyang/models/eval3d/temp/uni_F16_MAE_CNN_M_dropout0.5_full/ckpt_29.pth/mp_rank_00_model_states.pt",
     ),
     tokenizer='ViT-H-14',
     temp=1 / 100.0,
@@ -62,7 +79,8 @@ criterion = dict(
         loss_format=0.2,
         loss_prompt=0.8,
         loss_score=1.0
-    ),  # 0: disabled.
+    ),
+    loss_type='mse',            # changed
 )
 
 optimizer = dict(
@@ -75,7 +93,7 @@ optimizer = dict(
     different_lr=dict(enable=False, module_names=[], lr=1e-3),
 )
 
-scheduler = dict(sched="cosine", epochs=2, min_lr_multi=0.01, warmup_epochs=0.6)
+scheduler = dict(sched="cosine", epochs=4, min_lr_multi=0.01, warmup_epochs=0.6)
 
 evaluate = False
 deep_fusion = False
@@ -95,13 +113,12 @@ wandb = dict(
     enable=True,
     entity="2793342995czy",  # username or team name to store the runs, see https://docs.wandb.ai/ref/python/init
     project="3DEval",  # setup in your command line
+    prefix='train/'
 )
 dist_url = "env://"
 device = "cuda"
 mode = "pt"
-
 # ========================= others ==========================
-output_dir = "temp/infer"  # output dir
 resume = False  # if True, load optimizer and scheduler states as well
 debug = False
 log_freq = 1
@@ -109,7 +126,7 @@ seed = 42
 
 save_latest = False
 save_iter = 500
-auto_resume = True
+auto_resume = False
 pretrained_path = ""  # path to pretrained model weights, for resume only?
 
 deepspeed = dict(

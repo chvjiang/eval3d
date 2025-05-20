@@ -1,3 +1,5 @@
+import os
+import json
 import datetime
 import logging
 import time
@@ -9,7 +11,7 @@ import torch.backends.cudnn as cudnn
 import torch.distributed as dist
 import wandb
 from torch.utils.data import ConcatDataset
-
+import random
 from dataset.serialize import local_broadcast_process_authkey
 from dataset import MetaLoader, create_dataset, create_loader, create_sampler, create_stateful_sampler
 from models import *
@@ -19,6 +21,8 @@ from utils.basic_utils import MetricLogger, SmoothedValue, setup_seed
 from utils.config_utils import setup_main
 from utils.distributed import get_rank, is_main_process
 from utils.logger import log_dict_to_wandb, setup_wandb
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 logger = logging.getLogger(__name__)
 
@@ -40,12 +44,14 @@ def setup_dataloaders(config, mode="pt"):
     return test_loaders
 
 
-def main(config):
-    metrics = ['Detail','Color','Light','Material']
+def main(config, k=0):
+    metrics = config.test_dim
+    eval_res = {k:[] for k in metrics}
+
     if is_main_process() and config.wandb.enable:
         run = setup_wandb(config)
 
-    setup_seed(config.seed + get_rank())
+    # setup_seed(config.seed + get_rank())
     device = torch.device(config.device)
     
     test_loaders = setup_dataloaders(config, mode=config.mode)
@@ -77,30 +83,59 @@ def main(config):
         wandb.watch(model)
 
     start_time = time.time()
-
+    model.eval()
     with torch.no_grad():
         with torch.cuda.amp.autocast(enabled=config.use_half_precision, dtype=data_type):
             for _, (_, (image, text, idx, prompt, is_text_prompt, score)) in enumerate(iterator):
-                print(image.shape)
                 image = image.to(device, non_blocking=True)
                 idx = idx.to(device, non_blocking=True)
                 text_input = tokenizer(text).to(device)
 
-                # predicts = model.generate(image, text_input, idx=idx, prompt=prompt, is_text_prompt=is_text_prompt)
-                # for i, metric in enumerate(metrics):
-                #     metric_logger.update(**{f"{metric}":predicts[0][i]-score[0][i].to(device)})
+                predicts = model.generate(image, text_input, idx=idx, prompt=prompt, is_text_prompt=is_text_prompt)
+                score = score.unsqueeze(-1) if score is not None and len(score.shape) == 1 else score
+                for i, metric in enumerate(metrics):
+                    metric_logger.update(**{f"{metric}": torch.abs(predicts[:,i]-score[:,i].to(device)).mean()})
+                    for index in range(len(idx)):
+                        eval_res[metric].append({
+                            "index": int(idx[index].detach().cpu().numpy()), 
+                            "Predict": float(predicts[index][i].detach().cpu().float().numpy()), 
+                            "GT": float(score[index][i].detach().cpu().float().numpy()),
+                        })
 
-                sim = model.sim(image, text_input, idx=idx, prompt=prompt, is_text_prompt=is_text_prompt)[0]
-                import matplotlib.pyplot as plt
-                import seaborn as sns
-                plt.figure(figsize=(8, 8))
-                sns.heatmap(sim.detach().cpu().float().numpy(),
-                            cmap="Blues",
-                            annot=True,        # 显示数值
-                            linewidths=.5,     # 单元格边框线宽
-                            cbar=True)         # 显示颜色条
-                plt.savefig('different_method.png')
-                break
+                # sim = model.cross_sim(image, text_input, idx=idx, prompt=prompt, is_text_prompt=is_text_prompt)
+                # print(sim.shape)
+                # plt.figure(figsize=(8, 8))
+                # sns.heatmap(sim.detach().cpu().float().numpy(),
+                #             cmap="Blues",
+                #             # annot=True,        # 显示数值
+                #             # linewidths=.5,     # 单元格边框线宽
+                #             cbar=False,         # 显示颜色条
+                # )
+                # plt.xticks([])
+                # plt.yticks([])
+                # plt.savefig(f'.png')
+                # break
+
+    total_time = time.time() - start_time
+    total_time_str = str(datetime.timedelta(seconds=int(total_time)))
+    logger.info(f"Inference time {total_time_str}")
+    logger.info(f"Logs saved at {config.output_dir}")
+
+    # plt.figure(figsize=(8, 8*len(metrics)))
+    # for i, metric in enumerate(metrics):
+    #     a2 = [item['GT'] for item in eval_res[metric]]
+    #     b2 = [item['Predict'] for item in eval_res[metric]] 
+    #     plt.subplot(len(metrics),1,i+1)
+    #     plt.scatter(a2,b2,color='blue', marker='o')
+    #     plt.plot(range(5),color='red',linestyle='--')
+    #     plt.xlabel('GT')
+    #     plt.ylabel('Predict')
+    #     plt.title(metric)
+    # os.makedirs(f"{config.output_dir}/figs", exist_ok=True)
+    # plt.savefig(f"{config.output_dir}/figs/test.png")
+
+    with open(join(config.output_dir, config.test_file.anno_path.split('/')[-1]), 'w') as f:
+        json.dump(eval_res, f, indent=4)
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
@@ -112,6 +147,36 @@ def main(config):
 
 
 if __name__ == "__main__":
+    # data = json.load(open('/fs-computility/mllm/chuziyang/eval3d/data/stage1.json'))
+    # full = {i:[] for i in range(510)}
+    # for i in data:
+    #     if 'albedo' in i['video'] and os.path.isfile(i['prompt']):
+    #         name = i['video'].split('.')[0].split('/')[-1]
+    #         if 'Scan' not in name:
+    #             full[int(name)].append(i)
+    # for k,v in full.items():
+    #     if len(v) >= 8:
+    #         v = random.sample(v, 8)
+    #         with open('/fs-computility/mllm/chuziyang/eval3d/.json','w') as f:
+    #             json.dump(v, f, indent=4)
+    #         cfg = setup_main()
+    #         local_broadcast_process_authkey()
+    #         main(cfg, k)
+    # data = json.load(open('/fs-computility/mllm/chuziyang/eval3d/data/baseline_test.json'))
+    # methods = {}
+    # for i in data:
+    #     method = i['video'][0].split('/')[-2]
+    #     if method not in methods:
+    #         methods[method] = []
+    #     methods[method].append({
+    #         'video': i['video'][2],
+    #         'prompt': i['prompt'],
+    #         'score': i['score'][0],
+    #     })
+
+    # for k, v in methods.items():
+    #     with open('/fs-computility/mllm/shared/chuziyang/models/eval3d/.json','w') as f:
+    #         json.dump(v, f, indent=4)
     cfg = setup_main()
     local_broadcast_process_authkey()
-    main(cfg)
+    main(cfg, k=0)
