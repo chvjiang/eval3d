@@ -35,14 +35,14 @@ limitations under the License.
 import os
 import pathlib
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
-
+import csv
 import numpy as np
 import torch
 import torchvision.transforms as TF
 from PIL import Image
 from scipy import linalg
 from torch.nn.functional import adaptive_avg_pool2d
-
+import json
 try:
     from tqdm import tqdm
 except ImportError:
@@ -52,6 +52,8 @@ except ImportError:
 
 
 from pytorch_fid.inception import InceptionV3
+
+CACHE = {i: None for i in range(4)}
 
 parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
 parser.add_argument("--batch-size", type=int, default=50, help="Batch size to use")
@@ -263,26 +265,37 @@ def calculate_activation_statistics(
 
 
 def compute_statistics_of_path(path, model, batch_size, dims, device, num_workers=1):
-    if path.endswith(".npz"):
-        with np.load(path) as f:
-            m, s = f["mu"][:], f["sigma"][:]
-    else:
-        path = pathlib.Path(path)
-        files = sorted(
-            [file for ext in IMAGE_EXTENSIONS for file in path.glob("*.{}".format(ext))]
-        )
-        m, s = calculate_activation_statistics(
-            files, model, batch_size, dims, device, num_workers
-        )
+    if isinstance(path, str):
+        if path.endswith(".npz"):
+            with np.load(path) as f:
+                m, s = f["mu"][:], f["sigma"][:]
+        else:
+            path = pathlib.Path(path)
+            files = sorted(
+                [file for ext in IMAGE_EXTENSIONS for file in path.glob("*.{}".format(ext))]
+            )
+    elif isinstance(path, list):
+        files = []
+        for _path in path:
+            _path = pathlib.Path(_path)
+            files += [file for ext in IMAGE_EXTENSIONS for file in _path.glob("*.{}".format(ext))]
+        files = sorted(files)
+
+    m, s = calculate_activation_statistics(
+        files, model, batch_size, dims, device, num_workers
+    )
 
     return m, s
 
 
 def calculate_fid_given_paths(paths, batch_size, device, dims, num_workers=1):
     """Calculates the FID of two paths"""
-    for p in paths:
-        if not os.path.exists(p):
-            raise RuntimeError("Invalid path: %s" % p)
+
+    idx = paths[1].split('_')[-1].split('.')[0]
+
+    m2, s2 = CACHE[int(idx)] if CACHE[int(idx)] else [None, None]
+
+    paths = [json.load(open(path)) if path.endswith('.json') else path for path in paths]
 
     block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[dims]
 
@@ -291,9 +304,15 @@ def calculate_fid_given_paths(paths, batch_size, device, dims, num_workers=1):
     m1, s1 = compute_statistics_of_path(
         paths[0], model, batch_size, dims, device, num_workers
     )
-    m2, s2 = compute_statistics_of_path(
-        paths[1], model, batch_size, dims, device, num_workers
-    )
+    if m2 is None or s2 is None:
+        print(f'calculating CACHE for GT-{idx}')
+        m2, s2 = compute_statistics_of_path(
+            paths[1], model, batch_size, dims, device, num_workers
+        )
+        CACHE[int(idx)] = [m2, s2]
+    else:
+        print(f'using CACHE for GT-{idx}')
+
     fid_value = calculate_frechet_distance(m1, s1, m2, s2)
 
     return fid_value
@@ -345,11 +364,40 @@ def main():
         save_fid_stats(args.path, args.batch_size, device, args.dims, num_workers)
         return
 
-    fid_value = calculate_fid_given_paths(
-        args.path, args.batch_size, device, args.dims, num_workers
-    )
-    print("FID: ", fid_value)
+    results = {}
+    for i in os.listdir('data/baseline'):
+        if 'GT' not in i and i.endswith('.json'):
+            method = i.split('/')[-1].split('_')[0]
+            number = i.split('_')[-1].split('.')[0]
+            if method not in results.keys():
+                results[method] = {str(_): 0 for _ in range(4)}
+            args.path = [f'data/baseline/{i}', f'data/baseline/GT_{i.split("_")[-1]}']
+            fid_value = calculate_fid_given_paths(
+                args.path, args.batch_size, device, args.dims, num_workers
+            )
+            results[method][number] = fid_value
+
+    with open('data/baseline/fid.csv','a') as f:
+        writer = csv.writer(f)
+        for method, v in results.items():
+            writer.writerow([
+                method,
+                v['0'],
+                v['1'],
+                v['2'],
+                v['3'],
+            ])
 
 
 if __name__ == "__main__":
+
+    with open('data/baseline/fid.csv','w') as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            'method',
+            'Detail',
+            'Color',
+            'Light',
+            'Material',
+        ])
     main()
