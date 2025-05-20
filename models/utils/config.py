@@ -11,7 +11,7 @@ import sys
 import tempfile
 from copy import deepcopy
 from importlib import import_module
-
+import types
 import yaml
 
 from .easydict import EasyDict
@@ -125,7 +125,7 @@ class Config(object):
             cfg_dict = {
                 name: value
                 for name, value in mod.__dict__.items()
-                if not name.startswith("__")
+                if not name.startswith("__") and not isinstance(value, types.ModuleType)
             }
 
         elif filepath.endswith((".yml", ".yaml")):
