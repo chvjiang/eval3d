@@ -1,5 +1,8 @@
-# eval3d
-We have provided a useful toolkit for 3D objects rendering, including HDRI application, lighting rotation, camera rotation, and so on.
+# Hi3DEval
+[![Arxiv](https://img.shields.io/badge/Arxiv-Hi3DEval-blue?logo=arxiv)](https://arxiv.org/abs/2508.05609v1)
+[![HomePage](https://img.shields.io/badge/📖_Page-Hi3DEval-green?logo=demo)](https://zyh482.github.io/Hi3DEval/)
+
+We have provided an automatic evaluation pipeline for 3D Mesh generation together with a useful toolkit for 3D objects rendering, including HDRI application, camera rotation and so on.
 ## Quick Start
 ### Blender tools
 #### Install Blender
