@@ -603,11 +603,11 @@ if __name__ == '__main__':
     for index, i in enumerate(data):
         path = os.path.abspath(i.replace('\n',''))
         opt.mesh = path
-        sub_path = os.path.basename(os.path.dirname(path))
+        sub_path = os.path.basename(os.path.dirname(os.path.dirname(path)))
         obj_name = os.path.splitext(os.path.basename(path))[0]
         if opt.save_image is not None:
             os.makedirs(os.path.join(save_path_root,opt.mode,sub_path),exist_ok=True)
-            opt.save_image = os.path.join(save_path_root,opt.mode,sub_path,obj_name)
+            opt.save_image = os.path.join(save_path_root,opt.mode,sub_path)
         elif opt.save_video is not None:
             os.makedirs(os.path.join(save_path_root,opt.mode,sub_path),exist_ok=True)
             opt.save_video = os.path.join(save_path_root,opt.mode,sub_path,obj_name)

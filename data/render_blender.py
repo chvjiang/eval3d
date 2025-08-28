@@ -417,6 +417,12 @@ if __name__ == "__main__":
         print(d["name"], d["use"])
 
     object_name = os.path.splitext(os.path.basename(args.object_path))[0]
+    if 'kiuiobjs' in args.object_path:
+        dir_name = os.path.basename(os.path.dirname(args.object_path))
+        object_name = f'{dir_name}_{object_name}'
+    if 'Omniobjs' in args.object_path:
+        dir_name = os.path.basename(os.path.dirname(os.path.dirname(args.object_path)))
+        object_name = f'{dir_name}_{object_name}'
 
     args.output_dir = os.path.join(args.output_dir, object_name)
     try:

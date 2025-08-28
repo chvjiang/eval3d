@@ -44,7 +44,7 @@ def worker(queue, count, gpu):
             
         if gpu != -1:
             command = (f" CUDA_VISIBLE_DEVICES={gpu} ")
-            # command = (f" ")
+            command = (f" ")
         else:
             command = (f" GOMP_CPU_AFFINITY='0-63' OMP_NUM_THREADS=64 OMP_SCHEDULE=STATIC OMP_PROC_BIND=CLOSE ")
 
